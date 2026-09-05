@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: restobar-db
+    environment:
+      POSTGRES_USER: restobar_app
+      POSTGRES_PASSWORD: restobar_pass
+      POSTGRES_DB: restobar
+    ports:
+      - "5433:5432"
+    volumes:
+      - restobar-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U restobar_app -d restobar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    image: restobar-service
+    build: ./server
+    container_name: restobarService
+    environment:
+      DATABASE_URL: postgresql://restobar_app:restobar_pass@db:5432/restobar?schema=public
+      JWT_SECRET: ${JWT_SECRET:-9f2c8e4b7a1d3f6c0e5a9b8d7c6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8}
+      ADMIN_KEY: ${ADMIN_KEY:-dev-admin-key}
+      PORT: "3000"
+      NODE_ENV: production
+      CORS_ORIGIN: "*"
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    image: restobar-web
+    build: ./client
+    container_name: restobar-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+volumes:
+  restobar-db-data:
