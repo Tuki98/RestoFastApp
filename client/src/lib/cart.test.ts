@@ -3,30 +3,47 @@ import { computeTotals, mergeLines, TAX_RATE } from './cart'
 import type { CartLine } from './cart'
 
 describe('computeTotals', () => {
-  it('calcula subtotal, IVA y total con precisión de centavos', () => {
+  it('sin applyIgv no aplica impuesto', () => {
     const totals = computeTotals([
       { unitPrice: 135, quantity: 2 },
       { unitPrice: 55, quantity: 1 },
     ])
 
     expect(totals.subtotal).toBe(325)
-    expect(totals.tax).toBe(52)
-    expect(totals.total).toBe(377)
+    expect(totals.tax).toBe(0)
+    expect(totals.total).toBe(325)
     expect(totals.itemCount).toBe(3)
   })
 
-  it('es centavo-exacto con precios decimales', () => {
-    const totals = computeTotals([
-      { unitPrice: 0.1, quantity: 3 },
-      { unitPrice: 19.99, quantity: 2 },
-    ])
+  it('aplica IGV cuando applyIgv es true', () => {
+    const totals = computeTotals(
+      [
+        { unitPrice: 135, quantity: 2 },
+        { unitPrice: 55, quantity: 1 },
+      ],
+      true,
+    )
+
+    expect(totals.subtotal).toBe(325)
+    expect(totals.tax).toBe(52)
+    expect(totals.total).toBe(377)
+  })
+
+  it('es centavo-exacto con precios decimales al aplicar IGV', () => {
+    const totals = computeTotals(
+      [
+        { unitPrice: 0.1, quantity: 3 },
+        { unitPrice: 19.99, quantity: 2 },
+      ],
+      true,
+    )
 
     expect(totals.subtotal).toBe(40.28)
     expect(totals.tax).toBe(6.44)
     expect(totals.total).toBe(46.72)
   })
 
-  it('usa la tasa de IVA definida', () => {
+  it('usa la tasa de IGV definida', () => {
     expect(TAX_RATE).toBe(0.16)
   })
 

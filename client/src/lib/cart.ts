@@ -17,12 +17,13 @@ export interface CartTotals {
 
 export function computeTotals(
   lines: Pick<CartLine, 'unitPrice' | 'quantity'>[],
+  applyIgv = false,
 ): CartTotals {
   const subtotalCents = lines.reduce(
     (acc, line) => acc + Math.round(line.unitPrice * 100) * line.quantity,
     0,
   )
-  const taxCents = Math.round(subtotalCents * TAX_RATE)
+  const taxCents = applyIgv ? Math.round(subtotalCents * TAX_RATE) : 0
   const subtotal = subtotalCents / 100
   const tax = taxCents / 100
   const total = (subtotalCents + taxCents) / 100

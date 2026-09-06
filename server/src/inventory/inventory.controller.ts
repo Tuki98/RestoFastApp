@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { InventoryArea } from '../../generated/prisma/enums';
 import { InventoryService } from './inventory.service';
 import { CreateIngredientDto } from './dto/create-ingredient.dto';
 import { UpdateIngredientDto } from './dto/update-ingredient.dto';
@@ -23,8 +24,11 @@ export class InventoryController {
 
   @Get('ingredients')
   @RequirePermissions('inventory:manage')
-  findIngredients(@CurrentUser('organizationId') organizationId: string) {
-    return this.inventoryService.findIngredients(organizationId);
+  findIngredients(
+    @CurrentUser('organizationId') organizationId: string,
+    @Query('area') area?: InventoryArea,
+  ) {
+    return this.inventoryService.findIngredients(organizationId, area);
   }
 
   @Post('ingredients')
@@ -88,7 +92,8 @@ export class InventoryController {
   findMovements(
     @CurrentUser('organizationId') organizationId: string,
     @Query('ingredientId') ingredientId?: string,
+    @Query('area') area?: InventoryArea,
   ) {
-    return this.inventoryService.findMovements(organizationId, ingredientId);
+    return this.inventoryService.findMovements(organizationId, ingredientId, area);
   }
 }

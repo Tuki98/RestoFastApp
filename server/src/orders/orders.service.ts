@@ -129,7 +129,8 @@ export class OrdersService {
       };
     });
 
-    const taxCents = Math.round(subtotalCents * TAX_RATE);
+    // El IGV va desactivado por defecto; el cajero decide aplicarlo al cobrar.
+    const taxCents = 0;
 
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
@@ -260,10 +261,25 @@ export class OrdersService {
       throw new BadRequestException('No se puede cobrar una orden cancelada');
     }
 
+    // El IGV va desactivado por defecto; el cajero decide aplicarlo al cobrar.
+    const subtotalCents = Math.round(Number(order.subtotal) * 100);
+    let taxCents = Math.round(Number(order.tax) * 100);
+    let totalCents = subtotalCents + taxCents;
+    if (dto.applyIgv) {
+      taxCents = Math.round(subtotalCents * TAX_RATE);
+      totalCents = subtotalCents + taxCents;
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.order.update({
         where: { id },
-        data: { status: 'PAID', paidAt: new Date() },
+        data: {
+          status: 'PAID',
+          paidAt: new Date(),
+          ...(dto.applyIgv
+            ? { tax: taxCents / 100, total: totalCents / 100 }
+            : {}),
+        },
         include: {
           items: { orderBy: { id: 'asc' } },
           table: { select: { id: true, number: true, section: true } },
@@ -276,7 +292,7 @@ export class OrdersService {
         data: {
           orderId: id,
           method: dto.method,
-          amount: order.total,
+          amount: dto.applyIgv ? totalCents / 100 : order.total,
           receivedById: userId,
         },
       });

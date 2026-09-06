@@ -129,7 +129,7 @@ describe('OrdersService', () => {
       );
     });
 
-    it('crea la orden con snapshots, IVA y totales; marca la mesa ocupada', async () => {
+    it('crea la orden con snapshots y totales (sin IVA por defecto); marca la mesa ocupada', async () => {
       prisma.product.findMany.mockResolvedValue([
         { id: 'p1', name: 'Hamburguesa clásica', price: 135 },
         { id: 'p2', name: 'Cerveza', price: 55 },
@@ -151,8 +151,8 @@ describe('OrdersService', () => {
       expect(created.data.status).toBe('PENDING');
       expect(created.data.createdById).toBe('u1');
       expect(created.data.subtotal).toBe(325);
-      expect(created.data.tax).toBe(52);
-      expect(created.data.total).toBe(377);
+      expect(created.data.tax).toBe(0);
+      expect(created.data.total).toBe(325);
       expect(created.data.items.create).toHaveLength(2);
       expect(created.data.items.create[0]).toMatchObject({
         productId: 'p1',
@@ -359,6 +359,67 @@ describe('OrdersService', () => {
       await expect(
         service.pay(ORG, 'o1', { method: 'CARD' }, 'u3'),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('aplica IGV al cobrar cuando applyIgv es true', async () => {
+      prisma.order.findFirst.mockResolvedValue(
+        orderRow({
+          status: 'SERVED',
+          subtotal: '450.00',
+          tax: '0.00',
+          total: '450.00',
+        }),
+      );
+      prisma.order.update.mockResolvedValue(
+        orderRow({ status: 'PAID', paidAt: '2026-01-01T00:00:00.000Z' }),
+      );
+
+      await service.pay(ORG, 'o1', { method: 'CASH', applyIgv: true }, 'u3');
+
+      expect(prisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'PAID',
+            tax: 72,
+            total: 522,
+          }),
+        }),
+      );
+      expect(prisma.payment.create).toHaveBeenCalledWith({
+        data: {
+          orderId: 'o1',
+          method: 'CASH',
+          amount: 522,
+          receivedById: 'u3',
+        },
+      });
+    });
+
+    it('cobra sin IGV cuando applyIgv no se envía', async () => {
+      prisma.order.findFirst.mockResolvedValue(
+        orderRow({
+          status: 'SERVED',
+          subtotal: '450.00',
+          tax: '0.00',
+          total: '450.00',
+        }),
+      );
+
+      await service.pay(ORG, 'o1', { method: 'YAPE_PLIN' }, 'u3');
+
+      expect(prisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'PAID', paidAt: expect.any(Date) },
+        }),
+      );
+      expect(prisma.payment.create).toHaveBeenCalledWith({
+        data: {
+          orderId: 'o1',
+          method: 'YAPE_PLIN',
+          amount: '450.00',
+          receivedById: 'u3',
+        },
+      });
     });
   });
 

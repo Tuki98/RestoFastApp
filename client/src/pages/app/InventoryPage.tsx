@@ -27,6 +27,8 @@ import {
   type InventoryAlert,
   type InventoryAlertType,
   type InventoryMovement,
+  type InventoryArea,
+  INVENTORY_AREA_LABEL,
   type UpdateIngredientPayload,
 } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api'
@@ -99,10 +101,11 @@ function InventoryPage() {
   } | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Ingredient | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [area, setArea] = useState<InventoryArea>('BARRA')
 
   const { data: ingredients, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['ingredients'],
-    queryFn: getIngredients,
+    queryKey: ['ingredients', area],
+    queryFn: () => getIngredients(area),
   })
 
   const { data: alerts } = useQuery({
@@ -111,8 +114,8 @@ function InventoryPage() {
   })
 
   const { data: movements } = useQuery({
-    queryKey: ['inventory-movements'],
-    queryFn: () => getInventoryMovements(),
+    queryKey: ['inventory-movements', area],
+    queryFn: () => getInventoryMovements(area),
   })
 
   const invalidate = async () => {
@@ -222,19 +225,45 @@ function InventoryPage() {
           </p>
         </div>
         <Button
-          onClick={() => setIngredientDialog({ open: true, ingredient: null })}
+          onClick={() =>
+            setIngredientDialog({ open: true, ingredient: null })
+          }
         >
           <Plus className="size-4" />
-          Nuevo ingrediente
+          Nuevo ingrediente ({INVENTORY_AREA_LABEL[area]})
         </Button>
       </div>
 
-      <AlertsBanner alerts={alerts} />
+      <div className="inline-flex rounded-lg border bg-card p-1">
+        {(['BARRA', 'COCINA'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => {
+              setArea(option)
+              setExpanded(new Set())
+            }}
+            className={cn(
+              'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+              area === option
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {INVENTORY_AREA_LABEL[option]}
+          </button>
+        ))}
+      </div>
+
+      <AlertsBanner alerts={alerts} area={area} />
 
       {ingredients?.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border bg-card text-center">
           <Package className="size-8 text-muted-foreground" />
-          <p className="text-muted-foreground">Aún no hay ingredientes.</p>
+          <p className="text-muted-foreground">
+            Aún no hay ingredientes en{' '}
+            {INVENTORY_AREA_LABEL[area].toLowerCase()}.
+          </p>
           <Button
             variant="outline"
             onClick={() =>
@@ -271,6 +300,7 @@ function InventoryPage() {
       <IngredientDialog
         open={ingredientDialog.open}
         ingredient={ingredientDialog.ingredient}
+        defaultArea={area}
         onOpenChange={(open) =>
           setIngredientDialog((s) => ({ ...s, open }))
         }
@@ -322,7 +352,13 @@ function InventoryPage() {
   )
 }
 
-function AlertsBanner({ alerts }: { alerts?: InventoryAlert[] }) {
+function AlertsBanner({
+  alerts,
+  area,
+}: {
+  alerts?: InventoryAlert[]
+  area: InventoryArea
+}) {
   const groups = useMemo(() => {
     const result: Record<string, InventoryAlert[]> = {
       EXPIRED: [],
@@ -330,10 +366,11 @@ function AlertsBanner({ alerts }: { alerts?: InventoryAlert[] }) {
       LOW_STOCK: [],
     }
     for (const alert of alerts ?? []) {
+      if (alert.ingredient.area !== area) continue
       result[alert.type]?.push(alert)
     }
     return result
-  }, [alerts])
+  }, [alerts, area])
 
   const hasAny = Object.values(groups).some((group) => group.length > 0)
   if (!hasAny) return null
@@ -460,6 +497,9 @@ function IngredientCard({
         <div className="space-y-1">
           <CardTitle className="text-lg">{ingredient.name}</CardTitle>
           <div className="flex flex-wrap gap-1.5">
+            <Badge variant="secondary">
+              {INVENTORY_AREA_LABEL[ingredient.area]}
+            </Badge>
             {!ingredient.active && <Badge variant="outline">Inactivo</Badge>}
             {hasExpired && <Badge variant="destructive">Lote caducado</Badge>}
             {hasExpiring && (
@@ -598,6 +638,7 @@ function MovementsTable({ movements }: { movements: InventoryMovement[] }) {
                 <TableHead>Fecha</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Ingrediente</TableHead>
+                <TableHead>Área</TableHead>
                 <TableHead className="text-right">Cantidad</TableHead>
                 <TableHead>Usuario</TableHead>
                 <TableHead>Nota</TableHead>
@@ -616,7 +657,17 @@ function MovementsTable({ movements }: { movements: InventoryMovement[] }) {
                       {movement.type === 'IN' ? 'Entrada' : 'Salida'}
                     </Badge>
                   </TableCell>
-                  <TableCell>{movement.ingredient.name}</TableCell>
+                  <TableCell>
+                    {movement.ingredient.name}
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      {movement.ingredient.unit}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {INVENTORY_AREA_LABEL[movement.area]}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {movement.type === 'IN' ? '+' : '−'}
                     {formatNumber(movement.quantity)} {movement.ingredient.unit}
@@ -642,6 +693,9 @@ function MovementsTable({ movements }: { movements: InventoryMovement[] }) {
                     {movement.type === 'IN' ? 'Entrada' : 'Salida'}
                   </Badge>
                   <span className="truncate">{movement.ingredient.name}</span>
+                  <Badge variant="outline">
+                    {INVENTORY_AREA_LABEL[movement.area]}
+                  </Badge>
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {formatDate(movement.createdAt)} · {movement.user.name}
@@ -667,6 +721,7 @@ function MovementsTable({ movements }: { movements: InventoryMovement[] }) {
 function IngredientDialog({
   open,
   ingredient,
+  defaultArea,
   onOpenChange,
   isSubmitting,
   error,
@@ -674,6 +729,7 @@ function IngredientDialog({
 }: {
   open: boolean
   ingredient: Ingredient | null
+  defaultArea: InventoryArea
   onOpenChange: (open: boolean) => void
   isSubmitting: boolean
   error: Error | null
@@ -684,12 +740,14 @@ function IngredientDialog({
   const [minStock, setMinStock] = useState('0')
   const [shelfLifeDays, setShelfLifeDays] = useState('')
   const [active, setActive] = useState(true)
+  const [area, setArea] = useState<InventoryArea>(defaultArea)
 
   const editing = Boolean(ingredient)
 
   function reset() {
     setName(ingredient?.name ?? '')
     setUnit(ingredient?.unit ?? '')
+    setArea(ingredient?.area ?? defaultArea)
     setMinStock(String(ingredient?.minStock ?? 0))
     setShelfLifeDays(
       ingredient?.shelfLifeDays ? String(ingredient.shelfLifeDays) : '',
@@ -702,6 +760,7 @@ function IngredientDialog({
     onSubmit({
       name: name.trim(),
       unit: unit.trim(),
+      area,
       minStock: minStock === '' ? 0 : Number(minStock),
       ...(shelfLifeDays === ''
         ? {}
@@ -752,6 +811,27 @@ function IngredientDialog({
                   maxLength={20}
                   required
                 />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Área</Label>
+              <div className="inline-flex rounded-lg border bg-card p-1">
+                {(['BARRA', 'COCINA'] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setArea(option)}
+                    className={cn(
+                      'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
+                      area === option
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {INVENTORY_AREA_LABEL[option]}
+                  </button>
+                ))}
               </div>
             </div>
 

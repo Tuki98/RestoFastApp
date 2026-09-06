@@ -141,18 +141,25 @@ enum MovementType {
   OUT
 }
 
+// Área de inventario: cada insumo pertenece a una sola área (exclusivo por área).
+enum InventoryArea {
+  BARRA
+  COCINA
+}
+
 model Ingredient {
-  id             String       @id @default(uuid())
+  id             String         @id @default(uuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization   @relation(fields: [organizationId], references: [id])
   name           String
   unit           String // kg, l, pza, gr...
-  stock          Decimal      @default(0) @db.Decimal(12, 3)
-  minStock       Decimal      @default(0) @db.Decimal(12, 3)
+  area           InventoryArea  @default(BARRA) // Barra | Cocina
+  stock          Decimal        @default(0) @db.Decimal(12, 3)
+  minStock       Decimal        @default(0) @db.Decimal(12, 3)
   shelfLifeDays  Int?     // días que el insumo se conserva correctamente
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   recipeItems   RecipeItem[]
   movements     InventoryMovement[]
@@ -190,17 +197,18 @@ model RecipeItem {
 }
 
 model InventoryMovement {
-  id           String       @id @default(uuid())
+  id           String         @id @default(uuid())
   ingredientId String
-  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id])
+  ingredient   Ingredient     @relation(fields: [ingredientId], references: [id])
   lotId        String?
-  lot          InventoryLot? @relation(fields: [lotId], references: [id])
+  lot          InventoryLot?  @relation(fields: [lotId], references: [id])
   type         MovementType
-  quantity     Decimal      @db.Decimal(12, 3)
+  quantity     Decimal        @db.Decimal(12, 3)
+  area         InventoryArea  @default(BARRA) // snapshot del área al momento del movimiento (trazabilidad)
   note         String?
   userId       String
-  user         User         @relation(fields: [userId], references: [id])
-  createdAt    DateTime     @default(now())
+  user         User           @relation(fields: [userId], references: [id])
+  createdAt    DateTime       @default(now())
 }
 
 // ---------- Mesas, QR y reservaciones ----------

@@ -32,7 +32,7 @@ import type {
   PaymentMethod,
   RestaurantTable,
 } from '@/lib/api'
-import { computeTotals, mergeLines } from '@/lib/cart'
+import { computeTotals, mergeLines, TAX_RATE } from '@/lib/cart'
 import type { CartLine } from '@/lib/cart'
 import {
   ORDER_STATUS_BADGE,
@@ -59,6 +59,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -230,8 +231,15 @@ function PosPage() {
   })
 
   const pay = useMutation({
-    mutationFn: ({ id, method }: { id: string; method: PaymentMethod }) =>
-      payOrder(id, method),
+    mutationFn: ({
+      id,
+      method,
+      applyIgv,
+    }: {
+      id: string
+      method: PaymentMethod
+      applyIgv?: boolean
+    }) => payOrder(id, method, applyIgv),
     onSuccess: async () => {
       setPayTarget(null)
       await invalidateOrders()
@@ -595,14 +603,16 @@ function PosPage() {
       </section>
 
       <PayDialog
+        key={payTarget?.id ?? 'none'}
         order={payTarget}
         isSubmitting={pay.isPending}
         error={pay.error}
+        canApplyIgv={user?.role.name === 'ADMIN'}
         onOpenChange={(open) => {
           if (!open) setPayTarget(null)
         }}
-        onConfirm={(method) => {
-          if (payTarget) pay.mutate({ id: payTarget.id, method })
+        onConfirm={(method, applyIgv) => {
+          if (payTarget) pay.mutate({ id: payTarget.id, method, applyIgv })
         }}
       />
 
@@ -973,10 +983,12 @@ function TicketBody({
               <dt>Subtotal</dt>
               <dd className="tabular-nums">{formatCurrency(totals.subtotal)}</dd>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <dt>IVA (16%)</dt>
-              <dd className="tabular-nums">{formatCurrency(totals.tax)}</dd>
-            </div>
+            {totals.tax > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <dt>IGV (16%)</dt>
+                <dd className="tabular-nums">{formatCurrency(totals.tax)}</dd>
+              </div>
+            )}
             <div className="flex justify-between text-base font-semibold">
               <dt>Total</dt>
               <dd className="tabular-nums">{formatCurrency(totals.total)}</dd>
@@ -1142,15 +1154,30 @@ function PayDialog({
   order,
   isSubmitting,
   error,
+  canApplyIgv,
   onOpenChange,
   onConfirm,
 }: {
   order: Order | null
   isSubmitting: boolean
   error: Error | null
+  canApplyIgv: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (method: PaymentMethod) => void
+  onConfirm: (method: PaymentMethod, applyIgv?: boolean) => void
 }) {
+  const [applyIgv, setApplyIgv] = useState(false)
+
+  const display = useMemo(() => {
+    if (!order) return null
+    const subtotalCents = Math.round(order.subtotal * 100)
+    const taxCents = applyIgv ? Math.round(subtotalCents * TAX_RATE) : 0
+    return {
+      subtotal: subtotalCents / 100,
+      tax: taxCents / 100,
+      total: (subtotalCents + taxCents) / 100,
+    }
+  }, [order, applyIgv])
+
   return (
     <Dialog open={Boolean(order)} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -1165,12 +1192,39 @@ function PayDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {order && (
+        {order && display && (
           <div className="space-y-4 py-4">
-            <div className="flex items-center justify-between border-t pt-3 text-lg font-semibold">
-              <span>Total</span>
-              <span className="tabular-nums">{formatCurrency(order.total)}</span>
-            </div>
+            <dl className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <dt>Subtotal</dt>
+                <dd className="tabular-nums">{formatCurrency(display.subtotal)}</dd>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <dt>IGV (16%)</dt>
+                <dd className="tabular-nums">{formatCurrency(display.tax)}</dd>
+              </div>
+              <div className="flex justify-between border-t pt-2 text-lg font-semibold">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatCurrency(display.total)}</dd>
+              </div>
+            </dl>
+
+            {canApplyIgv && (
+              <div className="flex items-center justify-between rounded-md border p-3">
+                <div>
+                  <p className="text-sm font-medium">Aplicar IGV (16%)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Solo se cobra impuesto en esta venta.
+                  </p>
+                </div>
+                <Switch
+                  checked={applyIgv}
+                  onCheckedChange={setApplyIgv}
+                  disabled={isSubmitting}
+                />
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map(
                 (method) => (
@@ -1179,7 +1233,7 @@ function PayDialog({
                     variant="outline"
                     className="h-12"
                     disabled={isSubmitting}
-                    onClick={() => onConfirm(method)}
+                    onClick={() => onConfirm(method, applyIgv)}
                   >
                     {PAYMENT_METHOD_LABEL[method]}
                   </Button>

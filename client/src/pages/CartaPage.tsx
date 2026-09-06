@@ -858,10 +858,12 @@ function CartDialog({
               <dt>Subtotal</dt>
               <dd className="tabular-nums">{formatCurrency(totals.subtotal)}</dd>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <dt>IVA (16%)</dt>
-              <dd className="tabular-nums">{formatCurrency(totals.tax)}</dd>
-            </div>
+            {totals.tax > 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <dt>IGV (16%)</dt>
+                <dd className="tabular-nums">{formatCurrency(totals.tax)}</dd>
+              </div>
+            )}
             <div className="flex justify-between text-base font-semibold">
               <dt>Total</dt>
               <dd className="tabular-nums">{formatCurrency(totals.total)}</dd>

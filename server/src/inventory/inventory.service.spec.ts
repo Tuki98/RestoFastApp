@@ -57,6 +57,7 @@ describe('InventoryService', () => {
           id: 'i1',
           name: 'Huevo',
           unit: 'pza',
+          area: 'COCINA',
           stock: 50,
           minStock: 60,
           shelfLifeDays: 28,
@@ -85,12 +86,25 @@ describe('InventoryService', () => {
       const [result] = await service.findIngredients(ORG);
 
       expect(result.stock).toBe(50);
+      expect(result.area).toBe('COCINA');
       expect(result.lowStock).toBe(true);
       expect(result.lots[0].alert).toBeNull();
       expect(result.lots[1].alert).toBeNull();
       expect(result.lots[1].daysLeft).toBe(1);
       expect(prisma.ingredient.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { organizationId: ORG } }),
+      );
+    });
+
+    it('filtra por área cuando se pasa area', async () => {
+      prisma.ingredient.findMany.mockResolvedValue([]);
+
+      await service.findIngredients(ORG, 'BARRA');
+
+      expect(prisma.ingredient.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { organizationId: ORG, area: 'BARRA' },
+        }),
       );
     });
 
@@ -145,10 +159,25 @@ describe('InventoryService', () => {
           organizationId: ORG,
           name: 'Huevo',
           unit: 'pza',
+          area: 'BARRA',
           minStock: 0,
           shelfLifeDays: null,
           active: true,
         }),
+      });
+    });
+
+    it('usa el área proporcionada', async () => {
+      prisma.ingredient.create.mockResolvedValue({ id: 'i2' });
+
+      await service.createIngredient(ORG, {
+        name: 'Cebolla',
+        unit: 'kg',
+        area: 'COCINA',
+      });
+
+      expect(prisma.ingredient.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ area: 'COCINA' }),
       });
     });
 
@@ -416,7 +445,7 @@ describe('InventoryService', () => {
           quantity: 5,
           note: null,
           createdAt: new Date(),
-          ingredient: { id: 'i1', name: 'Huevo', unit: 'pza' },
+          ingredient: { id: 'i1', name: 'Huevo', unit: 'pza', area: 'BARRA' },
           user: { id: 'u1', name: 'Admin' },
         },
       ]);
@@ -425,9 +454,22 @@ describe('InventoryService', () => {
 
       expect(result.quantity).toBe(5);
       expect(typeof result.quantity).toBe('number');
+      expect(result.ingredient.area).toBe('BARRA');
       expect(prisma.inventoryMovement.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { ingredient: { organizationId: ORG } },
+        }),
+      );
+    });
+
+    it('filtra por área cuando se pasa area', async () => {
+      prisma.inventoryMovement.findMany.mockResolvedValue([]);
+
+      await service.findMovements(ORG, undefined, 'COCINA');
+
+      expect(prisma.inventoryMovement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { ingredient: { organizationId: ORG, area: 'COCINA' } },
         }),
       );
     });

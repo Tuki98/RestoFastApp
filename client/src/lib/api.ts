@@ -368,8 +368,15 @@ export async function cancelOrder(id: string): Promise<Order> {
   return data
 }
 
-export async function payOrder(id: string, method: PaymentMethod): Promise<Order> {
-  const { data } = await api.post<Order>(`/orders/${id}/pay`, { method })
+export async function payOrder(
+  id: string,
+  method: PaymentMethod,
+  applyIgv?: boolean,
+): Promise<Order> {
+  const { data } = await api.post<Order>(`/orders/${id}/pay`, {
+    method,
+    ...(applyIgv ? { applyIgv } : {}),
+  })
   return data
 }
 
@@ -388,10 +395,18 @@ export interface InventoryLot {
   daysLeft: number | null
 }
 
+export type InventoryArea = 'BARRA' | 'COCINA'
+
+export const INVENTORY_AREA_LABEL: Record<InventoryArea, string> = {
+  BARRA: 'Barra',
+  COCINA: 'Cocina',
+}
+
 export interface Ingredient {
   id: string
   name: string
   unit: string
+  area: InventoryArea
   stock: number
   minStock: number
   shelfLifeDays: number | null
@@ -404,7 +419,12 @@ export type InventoryAlertType = 'EXPIRING_SOON' | 'EXPIRED' | 'LOW_STOCK'
 
 export interface InventoryAlert {
   type: InventoryAlertType
-  ingredient: { id: string; name: string; unit: string }
+  ingredient: {
+    id: string
+    name: string
+    unit: string
+    area: InventoryArea
+  }
   lot?: { id: string; receivedAt: string; expiresAt: string | null }
   daysLeft: number | null
   stock?: number
@@ -415,15 +435,17 @@ export interface InventoryMovement {
   id: string
   type: MovementType
   quantity: number
+  area: InventoryArea
   note: string | null
   createdAt: string
-  ingredient: { id: string; name: string; unit: string }
+  ingredient: { id: string; name: string; unit: string; area: InventoryArea }
   user: { id: string; name: string }
 }
 
 export interface CreateIngredientPayload {
   name: string
   unit: string
+  area?: InventoryArea
   minStock?: number
   shelfLifeDays?: number
   active?: boolean
@@ -442,8 +464,12 @@ export interface CreateExitPayload {
   note?: string
 }
 
-export async function getIngredients(): Promise<Ingredient[]> {
-  const { data } = await api.get<Ingredient[]>('/inventory/ingredients')
+export async function getIngredients(
+  area?: InventoryArea,
+): Promise<Ingredient[]> {
+  const { data } = await api.get<Ingredient[]>('/inventory/ingredients', {
+    params: area ? { area } : undefined,
+  })
   return data
 }
 
@@ -493,10 +519,14 @@ export async function getInventoryAlerts(): Promise<InventoryAlert[]> {
 }
 
 export async function getInventoryMovements(
+  area?: InventoryArea,
   ingredientId?: string,
 ): Promise<InventoryMovement[]> {
   const { data } = await api.get<InventoryMovement[]>('/inventory/movements', {
-    params: ingredientId ? { ingredientId } : undefined,
+    params: {
+      ...(area ? { area } : {}),
+      ...(ingredientId ? { ingredientId } : {}),
+    },
   })
   return data
 }

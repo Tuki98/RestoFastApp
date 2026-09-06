@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -10,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { InventoryArea } from '../../../generated/prisma/enums';
 
 export class CreateIngredientDto {
   @IsString()
@@ -21,6 +23,10 @@ export class CreateIngredientDto {
   @IsNotEmpty()
   @MaxLength(20)
   unit!: string;
+
+  @IsOptional()
+  @IsEnum(InventoryArea)
+  area?: InventoryArea;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 3 })

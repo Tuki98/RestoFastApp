@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { TAX_RATE } from '../orders/orders.service';
 import { PublicCreateOrderDto } from './dto/public-create-order.dto';
 
 @Injectable()
@@ -119,7 +118,8 @@ export class PublicMenuService {
       };
     });
 
-    const taxCents = Math.round(subtotalCents * TAX_RATE);
+    // IGV desactivado por defecto.
+    const taxCents = 0;
     const customerToken = randomBytes(16).toString('hex');
 
     const order = await this.prisma.$transaction(async (tx) => {

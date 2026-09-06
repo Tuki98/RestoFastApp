@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { MovementType } from '../../generated/prisma/enums';
+import { InventoryArea, MovementType } from '../../generated/prisma/enums';
 import { Prisma, PrismaClient } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateIngredientDto } from './dto/create-ingredient.dto';
@@ -26,6 +26,7 @@ interface IngredientWithLots {
   id: string;
   name: string;
   unit: string;
+  area: InventoryArea;
   stock: number | { toString(): string };
   minStock: number | { toString(): string };
   shelfLifeDays: number | null;
@@ -46,9 +47,9 @@ interface InventoryLotRow {
 export class InventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findIngredients(organizationId: string) {
+  async findIngredients(organizationId: string, area?: InventoryArea) {
     const ingredients = await this.prisma.ingredient.findMany({
-      where: { organizationId },
+      where: { organizationId, ...(area ? { area } : {}) },
       include: {
         lots: { orderBy: { receivedAt: 'desc' } },
       },
@@ -67,6 +68,7 @@ export class InventoryService {
           organizationId,
           name: dto.name.trim(),
           unit: dto.unit.trim(),
+          area: dto.area ?? InventoryArea.BARRA,
           minStock: dto.minStock ?? 0,
           shelfLifeDays: dto.shelfLifeDays ?? null,
           active: dto.active ?? true,
@@ -157,6 +159,7 @@ export class InventoryService {
         lotId: lot.id,
         type: 'IN',
         quantity,
+        area: ingredient.area,
         note: dto.note?.trim() || null,
         userId,
       });
@@ -225,6 +228,7 @@ export class InventoryService {
           lotId: lot.id,
           type: 'OUT',
           quantity: take,
+          area: ingredient.area,
           note: dto.note?.trim() || null,
           userId,
         });
@@ -289,14 +293,23 @@ export class InventoryService {
     return alerts;
   }
 
-  async findMovements(organizationId: string, ingredientId?: string) {
+  async findMovements(
+    organizationId: string,
+    ingredientId?: string,
+    area?: InventoryArea,
+  ) {
     const movements = await this.prisma.inventoryMovement.findMany({
       where: {
-        ingredient: { organizationId },
+        ingredient: {
+          organizationId,
+          ...(area ? { area } : {}),
+        },
         ...(ingredientId ? { ingredientId } : {}),
       },
       include: {
-        ingredient: { select: { id: true, name: true, unit: true } },
+        ingredient: {
+          select: { id: true, name: true, unit: true, area: true },
+        },
         user: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -318,6 +331,7 @@ export class InventoryService {
       id: ingredient.id,
       name: ingredient.name,
       unit: ingredient.unit,
+      area: ingredient.area,
       stock,
       minStock,
       shelfLifeDays: ingredient.shelfLifeDays,
@@ -363,6 +377,7 @@ export class InventoryService {
       lotId: string;
       type: MovementType;
       quantity: number;
+      area: InventoryArea;
       note: string | null;
       userId: string;
     },
@@ -374,8 +389,14 @@ export class InventoryService {
     id: string;
     name: string;
     unit: string;
+    area?: InventoryArea;
   }) {
-    return { id: ingredient.id, name: ingredient.name, unit: ingredient.unit };
+    return {
+      id: ingredient.id,
+      name: ingredient.name,
+      unit: ingredient.unit,
+      area: ingredient.area,
+    };
   }
 
   private lotRef(lot: {
