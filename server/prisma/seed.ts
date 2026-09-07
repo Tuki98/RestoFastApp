@@ -26,7 +26,7 @@ const PERMISSIONS: Record<string, string> = {
 
 const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
   ADMIN: Object.keys(PERMISSIONS).filter((code) => code !== 'system:manage'),
-  SUPERADMIN: ['system:manage'],
+  SUPERADMIN: ['system:manage', 'roles:manage'],
   GERENTE: [
     'menu:manage',
     'tables:manage',
@@ -208,12 +208,36 @@ async function main() {
     });
 
     const permissions = ROLE_PERMISSIONS[name as RoleName];
+    const current = await prisma.rolePermission.findMany({
+      where: { roleId: role.id },
+      select: { permission: { select: { code: true } } },
+    });
+    const currentCodes = current.map((cp) => cp.permission.code);
+
     for (const code of permissions) {
-      const permission = await prisma.permission.findUniqueOrThrow({ where: { code } });
-      await prisma.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
-        update: {},
-        create: { roleId: role.id, permissionId: permission.id },
+      if (currentCodes.includes(code)) continue;
+      const permission = await prisma.permission.findUniqueOrThrow({
+        where: { code },
+      });
+      await prisma.rolePermission.create({
+        data: { roleId: role.id, permissionId: permission.id },
+      });
+    }
+
+    const sobrantes = currentCodes.filter(
+      (code) => !permissions.includes(code),
+    );
+    for (const code of sobrantes) {
+      const permission = await prisma.permission.findUniqueOrThrow({
+        where: { code },
+      });
+      await prisma.rolePermission.delete({
+        where: {
+          roleId_permissionId: {
+            roleId: role.id,
+            permissionId: permission.id,
+          },
+        },
       });
     }
   }
