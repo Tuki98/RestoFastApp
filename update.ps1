@@ -1,5 +1,6 @@
 # RestobarService :: actualización de imágenes
-# Reconstruye las imágenes de server y web, recrea los contenedores
+# Descarga los últimos cambios del repositorio (git pull),
+# reconstruye las imágenes de server y web, recrea los contenedores
 # y aplica migraciones/seed automáticamente al reiniciar el servidor.
 # Uso: .\update.cmd  (o  .\update.cmd --NoCache  para build limpio)
 param([switch]$NoCache)
@@ -45,6 +46,19 @@ function Wait-Port {
 Write-Host ''
 Write-Host '== RestobarService :: actualizacion de imagenes ==' -ForegroundColor Cyan
 Write-Host ''
+
+Write-Host 'Descargando cambios del repositorio (git pull)...'
+Push-Location $composeDir
+try {
+  & git pull --ff-only origin main *> $null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host '  git pull fallo. Cierra los cambios locales sin commitear o revisa las credenciales de GitHub.' -ForegroundColor Red
+    exit 1
+  }
+  Write-Host '  Repositorio actualizado.' -ForegroundColor Green
+} finally {
+  Pop-Location
+}
 
 if (Test-Path $dockerDesktop) {
   $running = Get-Process -Name 'Docker Desktop' -ErrorAction SilentlyContinue
