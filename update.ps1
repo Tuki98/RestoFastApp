@@ -13,6 +13,20 @@ $serverUrl     = 'http://localhost:3000'
 $webUrl        = 'http://localhost:8080'
 $composeDir    = $PSScriptRoot
 
+# Ejecuta un proceso nativo sin que el stderr dispare excepciones
+# y devuelve salida + código de salida + fallo.
+function Invoke-Native {
+  param([scriptblock]$Script)
+  $prevEA = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = & $Script 2>&1
+  } finally {
+    $ErrorActionPreference = $prevEA
+  }
+  return [pscustomobject]@{ Output = @($output); ExitCode = $LASTEXITCODE; Failed = ($LASTEXITCODE -ne 0) }
+}
+
 function Wait-Engine {
   param([int]$TimeoutSec = 180)
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -43,6 +57,14 @@ function Wait-Port {
   return $false
 }
 
+function Show-Output {
+  param([string[]]$Lines, [string]$Color = 'DarkGray', [int]$Tail = 0)
+  $selected = if ($Tail -gt 0) { $Lines | Select-Object -Last $Tail } else { $Lines }
+  foreach ($line in $selected) {
+    if ($line -ne $null) { Write-Host "  $line" -ForegroundColor $Color }
+  }
+}
+
 try {
   Write-Host ''
   Write-Host '== RestobarService :: actualizacion de imagenes ==' -ForegroundColor Cyan
@@ -51,9 +73,17 @@ try {
   Write-Host 'Descargando cambios del repositorio (git pull)...'
   Push-Location $composeDir
   try {
-    & git pull --ff-only origin main *> $null
-    if ($LASTEXITCODE -ne 0) {
-      throw 'git pull fallo. Cierra tus cambios locales sin commitear (revisa con git status) o configura tus credenciales de GitHub en esta maquina.'
+    $pull = Invoke-Native { git pull --ff-only origin main }
+    Show-Output -Lines $pull.Output
+    if ($pull.Failed) {
+      Write-Host '' -ForegroundColor Red
+      Write-Host '  git pull fallo (detalle arriba).' -ForegroundColor Red
+      Write-Host '  Causas frecuentes:' -ForegroundColor Yellow
+      Write-Host '  - Credenciales de GitHub no guardadas. Configuranos una vez:' -ForegroundColor Yellow
+      Write-Host '      git config --global credential.helper manager-core' -ForegroundColor White
+      Write-Host '      git pull' -ForegroundColor White
+      Write-Host '  - Cambios locales sin commitear (git status).' -ForegroundColor Yellow
+      throw 'git pull fallo. Revisa el detalle arriba.'
     }
     Write-Host '  Repositorio actualizado.' -ForegroundColor Green
   } finally {
@@ -78,16 +108,24 @@ try {
   try {
     if ($NoCache) {
       Write-Host 'Construyendo imagenes (build limpio sin cache)...'
-      & $dockerCli compose build --no-cache
+      $build = Invoke-Native { & $dockerCli compose build --no-cache }
     } else {
       Write-Host 'Construyendo imagenes (usa cache)...'
-      & $dockerCli compose build
+      $build = Invoke-Native { & $dockerCli compose build }
     }
-    if ($LASTEXITCODE -ne 0) { throw 'docker compose build fallo. Ve el detalle unos renglones arriba en rojo.' }
+    if ($build.Failed) {
+      Show-Output -Lines $build.Output -Color Red
+      throw 'docker compose build fallo. Revisa el detalle arriba.'
+    }
+    Show-Output -Lines $build.Output -Tail 15
 
     Write-Host 'Recreando contenedores...'
-    & $dockerCli compose up -d --force-recreate
-    if ($LASTEXITCODE -ne 0) { throw 'docker compose up fallo. Ve el detalle unos renglones arriba en rojo.' }
+    $up = Invoke-Native { & $dockerCli compose up -d --force-recreate }
+    if ($up.Failed) {
+      Show-Output -Lines $up.Output -Color Red
+      throw 'docker compose up fallo. Revisa el detalle arriba.'
+    }
+    Show-Output -Lines $up.Output -Tail 15
   } finally {
     Pop-Location
   }
