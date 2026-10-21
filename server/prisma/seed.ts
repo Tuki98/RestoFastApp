@@ -21,6 +21,7 @@ const PERMISSIONS: Record<string, string> = {
   'reservations:manage': 'Administrar reservaciones',
   'reports:view': 'Ver reportes',
   'caja:manage': 'Abrir y cerrar caja',
+  'expenses:manage': 'Registrar y gestionar gastos',
   'system:manage': 'Acceso al panel del operador del sistema',
 };
 
@@ -38,6 +39,7 @@ const ROLE_PERMISSIONS: Record<RoleName, string[]> = {
     'reservations:manage',
     'reports:view',
     'caja:manage',
+    'expenses:manage',
   ],
   CAJA: ['orders:create', 'orders:update', 'orders:pay', 'caja:manage'],
   MESERO: ['orders:create', 'orders:update'],

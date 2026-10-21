@@ -75,6 +75,7 @@ model Organization {
   orders           Order[]
   cashSessions     CashSession[]
   printers         Printer[]
+  expenses         Expense[]
 }
 
 model User {
@@ -96,6 +97,7 @@ model User {
   inventoryMovements InventoryMovement[]
   cashOpened     CashSession[] @relation("CashOpenedBy")
   cashClosed     CashSession[] @relation("CashClosedBy")
+  expenses       Expense[]     @relation("ExpenseRegisteredBy")
 }
 
 // ---------- Menú ----------
@@ -368,6 +370,37 @@ model CashSession {
   createdAt      DateTime  @default(now())
 
   @@index([openedAt])
+}
+
+// ---------- Gastos ----------
+
+// Categoría del gasto diario del negocio (compras, servicios, personal...).
+enum ExpenseCategory {
+  INSUMOS
+  SERVICIOS
+  PERSONAL
+  MANTENIMIENTO
+  TRANSPORTE
+  OTROS
+}
+
+// Gasto del negocio registrado manualmente. Es independiente de las ventas:
+// por ahora solo se registra y consulta, no se descuenta de la caja.
+model Expense {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  description    String
+  amount         Decimal         @db.Decimal(10, 2)
+  category       ExpenseCategory @default(OTROS)
+  incurredAt     DateTime        @default(now()) // fecha en que se realizó el gasto
+  note           String?
+  registeredById String
+  registeredBy   User            @relation("ExpenseRegisteredBy", fields: [registeredById], references: [id])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, incurredAt])
 }
 
 // ---------- Impresoras ----------

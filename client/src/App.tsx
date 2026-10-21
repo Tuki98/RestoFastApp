@@ -19,6 +19,7 @@ const TablesPage = lazy(() => import('@/pages/app/TablesPage'))
 const InventoryPage = lazy(() => import('@/pages/app/InventoryPage'))
 const UsersPage = lazy(() => import('@/pages/app/UsersPage'))
 const CajaPage = lazy(() => import('@/pages/app/CajaPage'))
+const ExpensesPage = lazy(() => import('@/pages/app/ExpensesPage'))
 const ReportsPage = lazy(() => import('@/pages/app/ReportsPage'))
 const AdminOrganizationsPage = lazy(
   () => import('@/pages/admin/AdminOrganizationsPage'),
@@ -110,6 +111,14 @@ function App() {
             element={
               <ProtectedRoute permission="caja:manage">
                 <CajaPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="gastos"
+            element={
+              <ProtectedRoute permission="expenses:manage">
+                <ExpensesPage />
               </ProtectedRoute>
             }
           />

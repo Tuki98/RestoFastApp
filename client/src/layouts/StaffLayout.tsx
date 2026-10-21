@@ -11,6 +11,7 @@ import {
   Martini,
   Menu,
   Package,
+  Receipt,
   Users,
   Wallet,
   X,
@@ -39,6 +40,7 @@ const NAV_ITEMS = [
     permission: 'inventory:manage',
   },
   { to: '/app/caja', label: 'Caja', icon: Wallet, permission: 'caja:manage' },
+  { to: '/app/gastos', label: 'Gastos', icon: Receipt, permission: 'expenses:manage' },
   { to: '/app/reports', label: 'Reportes', icon: BarChart3, permission: 'reports:view' },
   { to: '/app/users', label: 'Usuarios', icon: Users, permission: 'users:manage' },
 ]

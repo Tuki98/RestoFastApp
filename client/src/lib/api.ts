@@ -650,6 +650,85 @@ export async function closeCashSession(
   return data
 }
 
+// ---------- Gastos del negocio ----------
+
+export type ExpenseCategory =
+  | 'INSUMOS'
+  | 'SERVICIOS'
+  | 'PERSONAL'
+  | 'MANTENIMIENTO'
+  | 'TRANSPORTE'
+  | 'OTROS'
+
+export const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+  INSUMOS: 'Insumos',
+  SERVICIOS: 'Servicios',
+  PERSONAL: 'Personal',
+  MANTENIMIENTO: 'Mantenimiento',
+  TRANSPORTE: 'Transporte',
+  OTROS: 'Otros',
+}
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  'INSUMOS',
+  'SERVICIOS',
+  'PERSONAL',
+  'MANTENIMIENTO',
+  'TRANSPORTE',
+  'OTROS',
+]
+
+export interface Expense {
+  id: string
+  description: string
+  amount: number
+  category: ExpenseCategory
+  incurredAt: string
+  note: string | null
+  registeredBy: { id: string; name: string }
+  createdAt: string
+}
+
+export interface ExpensePayload {
+  description: string
+  amount: number
+  category?: ExpenseCategory
+  incurredAt?: string
+  note?: string
+}
+
+export interface ExpenseFilters {
+  from?: string
+  to?: string
+  category?: ExpenseCategory
+}
+
+export async function getExpenses(
+  filters: ExpenseFilters = {},
+): Promise<Expense[]> {
+  const { data } = await api.get<Expense[]>('/expenses', { params: filters })
+  return data
+}
+
+export async function createExpense(
+  payload: ExpensePayload,
+): Promise<Expense> {
+  const { data } = await api.post<Expense>('/expenses', payload)
+  return data
+}
+
+export async function updateExpense(
+  id: string,
+  payload: Partial<ExpensePayload>,
+): Promise<Expense> {
+  const { data } = await api.patch<Expense>(`/expenses/${id}`, payload)
+  return data
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  await api.delete(`/expenses/${id}`)
+}
+
 // ---------- Operador del sistema (panel de organizaciones) ----------
 
 export type OrgPlan = 'TRIAL' | 'ACTIVE' | 'PAUSED'

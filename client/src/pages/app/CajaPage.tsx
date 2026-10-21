@@ -400,8 +400,8 @@ function CloseCashDialog({
         if (!open) onOpenChange(false)
       }}
     >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-4 overflow-hidden sm:max-w-md">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Cerrar caja</DialogTitle>
           <DialogDescription>
             Cuenta el efectivo del cajón y registra el total. La diferencia se
@@ -411,7 +411,7 @@ function CloseCashDialog({
         </DialogHeader>
 
         {session && (
-          <div className="space-y-4 py-1">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <div className="space-y-2">
               <Label htmlFor="counted-cash">Efectivo contado</Label>
               <Input
@@ -537,12 +537,12 @@ function CloseCashDialog({
         )}
 
         {error && (
-          <p className="text-sm text-destructive">
+          <p className="shrink-0 text-sm text-destructive">
             {getApiErrorMessage(error)}
           </p>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

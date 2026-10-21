@@ -1,6 +1,6 @@
 # RestobarService
 
-Sistema de gestión para restaurante: comandas (POS), cocina, carta por QR, mesas, inventario, reservaciones y reportes.
+Sistema de gestión para restaurante: comandas (POS), cocina, carta por QR, mesas, inventario, gastos, reservaciones y reportes.
 
 ## Stack
 
@@ -155,6 +155,17 @@ Módulo de análisis para ADMIN y GERENTE (`reports:view`) en `/app/reports`. To
 
 La pantalla de reportes del frontend agrupa todo en pestañas (Resumen, Ventas, Productos, Servicio, Caja, Inventario) con presets de período (hoy, ayer, 7/30 días, este mes o personalizado), gráficas con Recharts y botón de exportación a Excel.
 
+## Gastos del negocio
+
+Registro simple de los gastos diarios del negocio (compras, servicios, personal, etc.). Por ahora es independiente de las ventas y de la caja: solo se registra y consulta, no se descuenta del efectivo esperado.
+
+- `GET /api/expenses?from=&to=&category=` — lista de gastos de la organización (más recientes primero), con filtros opcionales por rango de fechas (`from`/`to` ISO) y categoría.
+- `POST /api/expenses` — registra un gasto (`expenses:manage`). Cuerpo: `{ description, amount, category?, incurredAt?, note? }`.
+- `PATCH /api/expenses/:id` — edita un gasto (`expenses:manage`).
+- `DELETE /api/expenses/:id` — elimina un gasto (`expenses:manage`).
+
+Categorías disponibles: `INSUMOS`, `SERVICIOS`, `PERSONAL`, `MANTENIMIENTO`, `TRANSPORTE`, `OTROS`. Los montos son `Decimal` y se devuelven como número. Requiere `expenses:manage` (ADMIN y GERENTE). La pantalla `/app/gastos` muestra el total y el conteo del período, filtros por rango (hoy, semana, mes, todo) y categoría, y agrupa los gastos por día con su subtotal.
+
 ## Reservaciones (pendiente)
 
 La estructura de datos (mesa, cliente, fecha, comensales, estado `PENDING / CONFIRMED / CANCELLED / COMPLETED / NO_SHOW`) ya existe en `Reservation`, pero el módulo aún no se implementa.
@@ -179,7 +190,7 @@ En `client/`:
 
 ## Pruebas unitarias
 
-- **Servidor (Jest + ts-jest):** `cd server && npm run test`. Cubren los servicios de auth, usuarios, categorías, productos, mesas, órdenes, inventario y reportes (login exitoso/fallido/deshabilitado, normalización de correos, conflictos de unicidad → 409, eliminaciones protegidas, generación de QR, creación de comandas con snapshots e IVA, transiciones de estado, cancelación y cobro, caducidad de lotes con alertas, entradas/salidas FEFO y stock insuficiente, resúmenes y tendencias de ventas, productos top, tiempos de servicio, cierres de caja, inventario y exportación a Excel). Los tests no tocan la base de datos (PrismaService mockeado mediante `test/prisma-client.mock.ts`, que evita cargar el cliente generado).
+- **Servidor (Jest + ts-jest):** `cd server && npm run test`. Cubren los servicios de auth, usuarios, categorías, productos, mesas, órdenes, inventario, gastos y reportes (login exitoso/fallido/deshabilitado, normalización de correos, conflictos de unicidad → 409, eliminaciones protegidas, generación de QR, creación de comandas con snapshots e IVA, transiciones de estado, cancelación y cobro, caducidad de lotes con alertas, entradas/salidas FEFO y stock insuficiente, resúmenes y tendencias de ventas, productos top, tiempos de servicio, cierres de caja, inventario y exportación a Excel). Los tests no tocan la base de datos (PrismaService mockeado mediante `test/prisma-client.mock.ts`, que evita cargar el cliente generado).
 - **Cliente (Vitest):** `cd client && npm run test`. Cubren utilidades puras: `cn` (tailwind-merge), `formatCurrency`, `getApiErrorMessage` y el cálculo de totales del carrito (`computeTotals` con precisión de centavos e IVA).
 
 ## Seguridad y robustez

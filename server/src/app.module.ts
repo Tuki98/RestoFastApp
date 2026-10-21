@@ -11,6 +11,7 @@ import { TablesModule } from './tables/tables.module';
 import { OrdersModule } from './orders/orders.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { CashModule } from './cash/cash.module';
+import { ExpensesModule } from './expenses/expenses.module';
 import { ReportsModule } from './reports/reports.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { AdminModule } from './admin/admin.module';
@@ -29,6 +30,7 @@ import { AdminModule } from './admin/admin.module';
     OrdersModule,
     InventoryModule,
     CashModule,
+    ExpensesModule,
     ReportsModule,
     OrganizationsModule,
     AdminModule,
