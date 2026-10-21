@@ -1,30 +1,31 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import StaffLayout from '@/layouts/StaffLayout'
 import AdminLayout from '@/layouts/AdminLayout'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { isOperator } from '@/lib/api'
+import { lazyWithRetry } from '@/lib/lazyWithRetry'
 import { useAuthStore } from '@/stores/authStore'
 import { Toaster } from '@/components/ui/toaster'
 import PlaceholderPage from '@/pages/app/PlaceholderPage'
 
-const HomePage = lazy(() => import('@/pages/HomePage'))
-const LoginPage = lazy(() => import('@/pages/LoginPage'))
-const RegisterPage = lazy(() => import('@/pages/RegisterPage'))
-const CartaPage = lazy(() => import('@/pages/CartaPage'))
-const PosPage = lazy(() => import('@/pages/app/PosPage'))
-const KitchenPage = lazy(() => import('@/pages/app/KitchenPage'))
-const MenuPage = lazy(() => import('@/pages/app/MenuPage'))
-const TablesPage = lazy(() => import('@/pages/app/TablesPage'))
-const InventoryPage = lazy(() => import('@/pages/app/InventoryPage'))
-const UsersPage = lazy(() => import('@/pages/app/UsersPage'))
-const CajaPage = lazy(() => import('@/pages/app/CajaPage'))
-const ExpensesPage = lazy(() => import('@/pages/app/ExpensesPage'))
-const ReportsPage = lazy(() => import('@/pages/app/ReportsPage'))
-const AdminOrganizationsPage = lazy(
+const HomePage = lazyWithRetry(() => import('@/pages/HomePage'))
+const LoginPage = lazyWithRetry(() => import('@/pages/LoginPage'))
+const RegisterPage = lazyWithRetry(() => import('@/pages/RegisterPage'))
+const CartaPage = lazyWithRetry(() => import('@/pages/CartaPage'))
+const PosPage = lazyWithRetry(() => import('@/pages/app/PosPage'))
+const KitchenPage = lazyWithRetry(() => import('@/pages/app/KitchenPage'))
+const MenuPage = lazyWithRetry(() => import('@/pages/app/MenuPage'))
+const TablesPage = lazyWithRetry(() => import('@/pages/app/TablesPage'))
+const InventoryPage = lazyWithRetry(() => import('@/pages/app/InventoryPage'))
+const UsersPage = lazyWithRetry(() => import('@/pages/app/UsersPage'))
+const CajaPage = lazyWithRetry(() => import('@/pages/app/CajaPage'))
+const ExpensesPage = lazyWithRetry(() => import('@/pages/app/ExpensesPage'))
+const ReportsPage = lazyWithRetry(() => import('@/pages/app/ReportsPage'))
+const AdminOrganizationsPage = lazyWithRetry(
   () => import('@/pages/admin/AdminOrganizationsPage'),
 )
-const AdminOrganizationUsersPage = lazy(
+const AdminOrganizationUsersPage = lazyWithRetry(
   () => import('@/pages/admin/AdminOrganizationUsersPage'),
 )
 

@@ -602,10 +602,24 @@ export interface CashIncomeByMethod {
   amount: number
 }
 
+export interface CashExpenseItem {
+  id: string
+  description: string
+  amount: number
+  category: ExpenseCategory
+  incurredAt: string
+}
+
 export interface CashSummary {
   incomeByMethod: CashIncomeByMethod[]
   totalIncome: number
   ordersCount: number
+  expenses: {
+    total: number
+    count: number
+    items: CashExpenseItem[]
+  }
+  netIncome: number
   expectedCash: number
   countedCash?: number
   cashDifference?: number
@@ -686,6 +700,7 @@ export interface Expense {
   incurredAt: string
   note: string | null
   registeredBy: { id: string; name: string }
+  cashSessionId: string | null
   createdAt: string
 }
 
@@ -940,9 +955,19 @@ export interface CashReport {
     card: number
     yape: number
     total: number
+    expenses: number
+    netResult: number
     ordersCount: number
     expectedCash: number
   }[]
+  totals: {
+    income: number
+    expenses: number
+    expensesCount: number
+    netResult: number
+    sessionsCount: number
+  }
+  expensesByCategory: { category: ExpenseCategory; amount: number; count: number }[]
 }
 
 export interface InventoryReport {

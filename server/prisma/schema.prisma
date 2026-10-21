@@ -23,17 +23,17 @@ enum RoleName {
 }
 
 model Role {
-  id        String   @id @default(uuid())
-  name      RoleName @unique
-  label     String
-  createdAt DateTime @default(now())
-  users     User[]
+  id          String           @id @default(uuid())
+  name        RoleName         @unique
+  label       String
+  createdAt   DateTime         @default(now())
+  users       User[]
   permissions RolePermission[]
 }
 
 model Permission {
-  id          String   @id @default(uuid())
-  code        String   @unique // ej: "orders:create"
+  id          String           @id @default(uuid())
+  code        String           @unique // ej: "orders:create"
   description String?
   roles       RolePermission[]
 }
@@ -41,7 +41,7 @@ model Permission {
 model RolePermission {
   roleId       String
   permissionId String
-  role         Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
@@ -56,15 +56,15 @@ enum OrgPlan {
 }
 
 model Organization {
-  id           String   @id @default(uuid())
-  name         String
-  slug         String   @unique
-  plan         OrgPlan  @default(TRIAL)
-  trialEndsAt  DateTime?
-  maxUsers     Int? // null = sin límite
+  id                     String    @id @default(uuid())
+  name                   String
+  slug                   String    @unique
+  plan                   OrgPlan   @default(TRIAL)
+  trialEndsAt            DateTime?
+  maxUsers               Int? // null = sin límite
   usersPanelPasswordHash String? // contraseña de acceso a la gestión de usuarios
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   users            User[]
   categories       Category[]
@@ -83,21 +83,21 @@ model User {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
-  email          String       @unique
+  email          String        @unique
   passwordHash   String
-  active         Boolean      @default(true)
+  active         Boolean       @default(true)
   roleId         String
-  role           Role         @relation(fields: [roleId], references: [id])
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  role           Role          @relation(fields: [roleId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  ordersCreated  Order[]   @relation("CreatedBy")
-  ordersUpdated  OrderStatusHistory[]
-  payments       Payment[]
+  ordersCreated      Order[]              @relation("CreatedBy")
+  ordersUpdated      OrderStatusHistory[]
+  payments           Payment[]
   inventoryMovements InventoryMovement[]
-  cashOpened     CashSession[] @relation("CashOpenedBy")
-  cashClosed     CashSession[] @relation("CashClosedBy")
-  expenses       Expense[]     @relation("ExpenseRegisteredBy")
+  cashOpened         CashSession[]        @relation("CashOpenedBy")
+  cashClosed         CashSession[]        @relation("CashClosedBy")
+  expenses           Expense[]            @relation("ExpenseRegisteredBy")
 }
 
 // ---------- Menú ----------
@@ -122,15 +122,15 @@ model Product {
   categoryId     String
   category       Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   name           String
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  imageUrl    String?
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  description    String?
+  price          Decimal      @db.Decimal(10, 2)
+  imageUrl       String?
+  active         Boolean      @default(true)
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  recipe    RecipeItem[]
+  recipe     RecipeItem[]
   orderItems OrderItem[]
 
   @@unique([categoryId, name])
@@ -150,22 +150,22 @@ enum InventoryArea {
 }
 
 model Ingredient {
-  id             String         @id @default(uuid())
+  id             String        @id @default(uuid())
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id])
   name           String
   unit           String // kg, l, pza, gr...
-  area           InventoryArea  @default(BARRA) // Barra | Cocina
-  stock          Decimal        @default(0) @db.Decimal(12, 3)
-  minStock       Decimal        @default(0) @db.Decimal(12, 3)
-  shelfLifeDays  Int?     // días que el insumo se conserva correctamente
-  active         Boolean        @default(true)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  area           InventoryArea @default(BARRA) // Barra | Cocina
+  stock          Decimal       @default(0) @db.Decimal(12, 3)
+  minStock       Decimal       @default(0) @db.Decimal(12, 3)
+  shelfLifeDays  Int? // días que el insumo se conserva correctamente
+  active         Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  recipeItems   RecipeItem[]
-  movements     InventoryMovement[]
-  lots          InventoryLot[]
+  recipeItems RecipeItem[]
+  movements   InventoryMovement[]
+  lots        InventoryLot[]
 
   @@unique([organizationId, name])
 }
@@ -173,18 +173,18 @@ model Ingredient {
 // Lote = cada carga/entrada de inventario. Permite rastrear la fecha de
 // ingreso y disparar alertas cuando la caducidad está cerca.
 model InventoryLot {
-  id           String    @id @default(uuid())
+  id           String     @id @default(uuid())
   ingredientId String
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
-  quantity     Decimal   @db.Decimal(12, 3)
-  remaining    Decimal   @db.Decimal(12, 3)
-  receivedAt   DateTime  @default(now()) // fecha de ingreso
+  quantity     Decimal    @db.Decimal(12, 3)
+  remaining    Decimal    @db.Decimal(12, 3)
+  receivedAt   DateTime   @default(now()) // fecha de ingreso
   expiresAt    DateTime? // = receivedAt + shelfLifeDays
   exitedAt     DateTime? // fecha de salida: cuando el lote se agota
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  movements    InventoryMovement[]
+  movements InventoryMovement[]
 }
 
 model RecipeItem {
@@ -199,18 +199,18 @@ model RecipeItem {
 }
 
 model InventoryMovement {
-  id           String         @id @default(uuid())
+  id           String        @id @default(uuid())
   ingredientId String
-  ingredient   Ingredient     @relation(fields: [ingredientId], references: [id])
+  ingredient   Ingredient    @relation(fields: [ingredientId], references: [id])
   lotId        String?
-  lot          InventoryLot?  @relation(fields: [lotId], references: [id])
+  lot          InventoryLot? @relation(fields: [lotId], references: [id])
   type         MovementType
-  quantity     Decimal        @db.Decimal(12, 3)
-  area         InventoryArea  @default(BARRA) // snapshot del área al momento del movimiento (trazabilidad)
+  quantity     Decimal       @db.Decimal(12, 3)
+  area         InventoryArea @default(BARRA) // snapshot del área al momento del movimiento (trazabilidad)
   note         String?
   userId       String
-  user         User           @relation(fields: [userId], references: [id])
-  createdAt    DateTime       @default(now())
+  user         User          @relation(fields: [userId], references: [id])
+  createdAt    DateTime      @default(now())
 }
 
 // ---------- Mesas, QR y reservaciones ----------
@@ -222,19 +222,19 @@ enum TableStatus {
 }
 
 model RestaurantTable {
-  id             String        @id @default(uuid())
-  organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id])
-  number         Int
-  seats          Int
-  section        String        @default("Interior")
-  status         TableStatus   @default(FREE)
-  qrToken        String        @unique
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  number          Int
+  seats           Int
+  section         String       @default("Interior")
+  status          TableStatus  @default(FREE)
+  qrToken         String       @unique
   occupiedViaQrAt DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  orders      Order[]
+  orders       Order[]
   reservations Reservation[]
 
   @@unique([organizationId, number])
@@ -254,13 +254,13 @@ model Reservation {
   organization   Organization      @relation(fields: [organizationId], references: [id])
   tableId        String
   table          RestaurantTable   @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  customerName  String
-  customerPhone String?
-  date          DateTime
-  guests        Int
-  status        ReservationStatus @default(PENDING)
-  notes         String?
-  createdAt     DateTime          @default(now())
+  customerName   String
+  customerPhone  String?
+  date           DateTime
+  guests         Int
+  status         ReservationStatus @default(PENDING)
+  notes          String?
+  createdAt      DateTime          @default(now())
 }
 
 // ---------- Órdenes y pagos ----------
@@ -281,50 +281,50 @@ enum OrderStatus {
 }
 
 model Order {
-  id             String       @id @default(uuid())
+  id             String           @id @default(uuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  folio          Int          @unique @default(autoincrement())
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  folio          Int              @unique @default(autoincrement())
   orderType      OrderType
   tableId        String?
   table          RestaurantTable? @relation(fields: [tableId], references: [id])
-  status         OrderStatus  @default(PENDING)
-  notes         String?
-  customerToken String?      @unique // token del cliente para consultar el estado de su pedido
-  subtotal      Decimal    @db.Decimal(10, 2)
-  tax           Decimal    @default(0) @db.Decimal(10, 2)
-  total         Decimal    @db.Decimal(10, 2)
-  createdById   String?
-  createdBy     User?      @relation("CreatedBy", fields: [createdById], references: [id])
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  paidAt        DateTime?
+  status         OrderStatus      @default(PENDING)
+  notes          String?
+  customerToken  String?          @unique // token del cliente para consultar el estado de su pedido
+  subtotal       Decimal          @db.Decimal(10, 2)
+  tax            Decimal          @default(0) @db.Decimal(10, 2)
+  total          Decimal          @db.Decimal(10, 2)
+  createdById    String?
+  createdBy      User?            @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  paidAt         DateTime?
 
-  items      OrderItem[]
+  items         OrderItem[]
   statusHistory OrderStatusHistory[]
-  payments   Payment[]
+  payments      Payment[]
 }
 
 model OrderItem {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   orderId     String
-  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId   String?
-  product     Product?  @relation(fields: [productId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id])
   productName String // snapshot del nombre al momento de ordenar
-  unitPrice   Decimal   @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(10, 2)
   quantity    Int
   notes       String?
 }
 
 model OrderStatusHistory {
-  id        String      @id @default(uuid())
-  orderId   String
-  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  status    OrderStatus
-  changedAt DateTime    @default(now())
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      OrderStatus
+  changedAt   DateTime    @default(now())
   changedById String?
-  changedBy User?       @relation(fields: [changedById], references: [id])
+  changedBy   User?       @relation(fields: [changedById], references: [id])
 }
 
 enum PaymentMethod {
@@ -334,15 +334,15 @@ enum PaymentMethod {
 }
 
 model Payment {
-  id          String        @id @default(uuid())
-  orderId     String
-  order       Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  method      PaymentMethod
-  amount      Decimal       @db.Decimal(10, 2)
-  folio       Int           @unique @default(autoincrement())
+  id           String        @id @default(uuid())
+  orderId      String
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  method       PaymentMethod
+  amount       Decimal       @db.Decimal(10, 2)
+  folio        Int           @unique @default(autoincrement())
   receivedById String
-  receivedBy  User          @relation(fields: [receivedById], references: [id])
-  paidAt      DateTime      @default(now())
+  receivedBy   User          @relation(fields: [receivedById], references: [id])
+  paidAt       DateTime      @default(now())
 }
 
 // ---------- Caja ----------
@@ -351,23 +351,26 @@ model Payment {
 // cobros (Pagos) realizados entre apertura y cierre. Al cerrar se guarda un
 // snapshot de los totales por método de pago.
 model CashSession {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  openedAt       DateTime     @default(now())
-  closedAt       DateTime?
-  openingBalance Decimal   @default(0) @db.Decimal(10, 2) // caja chica inicial
-  closingCash    Decimal?  @db.Decimal(10, 2) // snapshot: efectivo al cerrar
-  closingCard    Decimal?  @db.Decimal(10, 2) // snapshot: tarjeta al cerrar
-  closingYape    Decimal?  @db.Decimal(10, 2) // snapshot: yape/plin al cerrar
-  countedCash    Decimal?  @db.Decimal(10, 2) // efectivo contado físicamente al cerrar
-  cashDifference Decimal?  @db.Decimal(10, 2) // sobre/faltante: contado - esperado
-  ordersCount    Int?
-  openedById     String
-  openedBy       User      @relation("CashOpenedBy", fields: [openedById], references: [id])
-  closedById     String?
-  closedBy       User?     @relation("CashClosedBy", fields: [closedById], references: [id])
-  createdAt      DateTime  @default(now())
+  id              String       @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  openedAt        DateTime     @default(now())
+  closedAt        DateTime?
+  openingBalance  Decimal      @default(0) @db.Decimal(10, 2) // caja chica inicial
+  closingCash     Decimal?     @db.Decimal(10, 2) // snapshot: efectivo al cerrar
+  closingCard     Decimal?     @db.Decimal(10, 2) // snapshot: tarjeta al cerrar
+  closingYape     Decimal?     @db.Decimal(10, 2) // snapshot: yape/plin al cerrar
+  closingExpenses Decimal?     @db.Decimal(10, 2) // snapshot: gastos en efectivo del turno
+  expensesCount   Int? // snapshot: nº de gastos registrados en el turno
+  countedCash     Decimal?     @db.Decimal(10, 2) // efectivo contado físicamente al cerrar
+  cashDifference  Decimal?     @db.Decimal(10, 2) // sobre/faltante: contado - esperado
+  ordersCount     Int?
+  openedById      String
+  openedBy        User         @relation("CashOpenedBy", fields: [openedById], references: [id])
+  closedById      String?
+  closedBy        User?        @relation("CashClosedBy", fields: [closedById], references: [id])
+  expenses        Expense[]    @relation("CashSessionExpenses")
+  createdAt       DateTime     @default(now())
 
   @@index([openedAt])
 }
@@ -384,8 +387,9 @@ enum ExpenseCategory {
   OTROS
 }
 
-// Gasto del negocio registrado manualmente. Es independiente de las ventas:
-// por ahora solo se registra y consulta, no se descuenta de la caja.
+// Gasto del negocio registrado manualmente. Si hay una caja abierta al
+// registrarlo, queda vinculado a esa sesión (cashSessionId). Los gastos se
+// descuentan del efectivo esperado al cerrar la caja.
 model Expense {
   id             String          @id @default(uuid())
   organizationId String
@@ -397,10 +401,13 @@ model Expense {
   note           String?
   registeredById String
   registeredBy   User            @relation("ExpenseRegisteredBy", fields: [registeredById], references: [id])
+  cashSessionId  String?
+  cashSession    CashSession?    @relation("CashSessionExpenses", fields: [cashSessionId], references: [id])
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
   @@index([organizationId, incurredAt])
+  @@index([cashSessionId])
 }
 
 // ---------- Impresoras ----------

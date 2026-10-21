@@ -6,7 +6,9 @@ import './index.css'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
 import { initTheme } from './lib/theme'
+import { installChunkErrorHandler } from './lib/chunkReload'
 
+installChunkErrorHandler()
 initTheme()
 
 const queryClient = new QueryClient({

@@ -282,7 +282,7 @@ function ActiveCashCard({
         <Badge>En curso</Badge>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border bg-muted/40 p-4">
             <p className="text-xs font-medium text-muted-foreground uppercase">
               Caja chica
@@ -297,6 +297,14 @@ function ActiveCashCard({
             </p>
             <p className="mt-1 text-2xl font-semibold">
               {summary.ordersCount}
+            </p>
+          </div>
+          <div className="rounded-lg border bg-muted/40 p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase">
+              Gastos del turno
+            </p>
+            <p className="mt-1 text-2xl font-semibold text-destructive">
+              {formatCurrency(summary.expenses.total)}
             </p>
           </div>
           <div className="rounded-lg border bg-primary/5 p-4">
@@ -331,6 +339,22 @@ function ActiveCashCard({
             <span className="text-sm font-semibold">Total ingresos</span>
             <span className="text-base font-bold">
               {formatCurrency(summary.totalIncome)}
+            </span>
+          </div>
+          {summary.expenses.count > 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              <span className="text-sm font-semibold">
+                Gastos del turno ({summary.expenses.count})
+              </span>
+              <span className="text-sm font-semibold text-destructive">
+                − {formatCurrency(summary.expenses.total)}
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <span className="text-sm font-semibold">Resultado neto</span>
+            <span className="text-base font-bold">
+              {formatCurrency(summary.netIncome)}
             </span>
           </div>
         </div>
@@ -488,7 +512,7 @@ function CloseCashDialog({
             <div className="rounded-lg border bg-muted/40 p-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">
-                  Efectivo esperado (caja chica + efectivo)
+                  Efectivo esperado (caja chica + efectivo − gastos)
                 </span>
                 <span className="font-semibold">
                   {formatCurrency(expectedCash)}
@@ -532,6 +556,41 @@ function CloseCashDialog({
                   {formatCurrency(session.summary.totalIncome)}
                 </span>
               </div>
+            </div>
+
+            {session.summary.expenses.count > 0 && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    Gastos del turno ({session.summary.expenses.count})
+                  </span>
+                  <span className="font-semibold text-destructive">
+                    − {formatCurrency(session.summary.expenses.total)}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1 border-t pt-2">
+                  {session.summary.expenses.items.map((expense) => (
+                    <li
+                      key={expense.id}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="truncate text-muted-foreground">
+                        {expense.description}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {formatCurrency(expense.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between rounded-lg border p-3 text-sm">
+              <span className="font-medium">Resultado neto</span>
+              <span className="font-semibold">
+                {formatCurrency(session.summary.netIncome)}
+              </span>
             </div>
           </div>
         )}

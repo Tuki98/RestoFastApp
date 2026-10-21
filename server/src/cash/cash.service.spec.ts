@@ -14,6 +14,7 @@ describe('CashService', () => {
       updateMany: jest.fn(),
     },
     payment: { findMany: jest.fn() },
+    expense: { findMany: jest.fn() },
   };
   let service: CashService;
 
@@ -26,6 +27,8 @@ describe('CashService', () => {
       closingCash: null,
       closingCard: null,
       closingYape: null,
+      closingExpenses: null,
+      expensesCount: null,
       ordersCount: null,
       openedById: 'u1',
       openedBy: { id: 'u1', name: 'Caja' },
@@ -38,6 +41,7 @@ describe('CashService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    prisma.expense.findMany.mockResolvedValue([]);
     service = new CashService(prisma as never);
   });
 
@@ -89,6 +93,47 @@ describe('CashService', () => {
               gte: expect.anything(),
               lt: expect.any(Date),
             },
+          },
+        }),
+      );
+    });
+
+    it('descuenta los gastos del turno del efectivo esperado', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue(sessionRow());
+      prisma.payment.findMany.mockResolvedValue([
+        { method: 'CASH', amount: '320.00' },
+      ]);
+      prisma.expense.findMany.mockResolvedValue([
+        {
+          id: 'e1',
+          description: 'Verduras',
+          amount: '20.00',
+          category: 'INSUMOS',
+          incurredAt: new Date('2026-08-11T10:00:00.000Z'),
+        },
+        {
+          id: 'e2',
+          description: 'Taxi',
+          amount: '15.50',
+          category: 'TRANSPORTE',
+          incurredAt: new Date('2026-08-11T11:00:00.000Z'),
+        },
+      ]);
+
+      const result = await service.getCurrent(ORG);
+
+      expect(result?.summary.expenses).toMatchObject({
+        total: 35.5,
+        count: 2,
+      });
+      expect(result?.summary.expenses.items).toHaveLength(2);
+      expect(result?.summary.netIncome).toBe(284.5);
+      expect(result?.summary.expectedCash).toBe(384.5);
+      expect(prisma.expense.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            organizationId: ORG,
+            incurredAt: { gte: expect.anything(), lt: expect.any(Date) },
           },
         }),
       );
@@ -203,6 +248,15 @@ describe('CashService', () => {
         { method: 'CARD', amount: '200.00' },
         { method: 'YAPE_PLIN', amount: '30.50' },
       ]);
+      prisma.expense.findMany.mockResolvedValue([
+        {
+          id: 'e1',
+          description: 'Gas',
+          amount: '20.00',
+          category: 'SERVICIOS',
+          incurredAt: new Date('2026-08-11T10:00:00.000Z'),
+        },
+      ]);
       prisma.cashSession.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.close(ORG, 'u2', 'c1');
@@ -213,9 +267,11 @@ describe('CashService', () => {
         summary: {
           totalIncome: 330.5,
           ordersCount: 3,
-          expectedCash: 200,
+          netIncome: 310.5,
+          expectedCash: 180,
         },
       });
+      expect(result.summary.expenses).toMatchObject({ total: 20, count: 1 });
       expect(prisma.cashSession.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ id: 'c1', closedAt: null }),
@@ -225,6 +281,8 @@ describe('CashService', () => {
             closingCash: 100,
             closingCard: 200,
             closingYape: 30.5,
+            closingExpenses: 20,
+            expensesCount: 1,
             ordersCount: 3,
           }),
         }),

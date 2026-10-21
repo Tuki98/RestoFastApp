@@ -15,10 +15,25 @@ const SESSION_INCLUDE = {
   closedBy: { select: { id: true, name: true } },
 } as const;
 
+export interface CashExpenseItem {
+  id: string;
+  description: string;
+  amount: number;
+  category: string;
+  incurredAt: Date;
+}
+
 export interface CashSummary {
   incomeByMethod: { method: PaymentMethod; amount: number }[];
   totalIncome: number;
   ordersCount: number;
+  expenses: {
+    total: number;
+    count: number;
+    items: CashExpenseItem[];
+  };
+  /** Ventas cobradas menos gastos en efectivo del turno. */
+  netIncome: number;
   countedCash?: number;
   cashDifference?: number;
 }
@@ -113,11 +128,10 @@ export class CashService {
       now,
     );
 
-    const expectedCash =
-      Math.round(
-        (Number(session.openingBalance) + this.amountFor(summary, 'CASH')) *
-          100,
-      ) / 100;
+    const expectedCash = this.expectedCashFor(
+      Number(session.openingBalance),
+      summary,
+    );
     const countedCash =
       dto.countedCash !== undefined
         ? Math.round(dto.countedCash * 100) / 100
@@ -132,6 +146,8 @@ export class CashService {
         closingCash: this.amountFor(summary, 'CASH'),
         closingCard: this.amountFor(summary, 'CARD'),
         closingYape: this.amountFor(summary, 'YAPE_PLIN'),
+        closingExpenses: summary.expenses.total,
+        expensesCount: summary.expenses.count,
         countedCash,
         cashDifference,
         ordersCount: summary.ordersCount,
@@ -158,13 +174,29 @@ export class CashService {
   private async liveSummary(organizationId: string, openedAt: Date, to?: Date) {
     const closeTime = to ?? new Date();
 
-    const payments = await this.prisma.payment.findMany({
-      where: {
-        order: { organizationId },
-        paidAt: { gte: openedAt, lt: closeTime },
-      },
-      select: { method: true, amount: true },
-    });
+    const [payments, expenses] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: {
+          order: { organizationId },
+          paidAt: { gte: openedAt, lt: closeTime },
+        },
+        select: { method: true, amount: true },
+      }),
+      this.prisma.expense.findMany({
+        where: {
+          organizationId,
+          incurredAt: { gte: openedAt, lt: closeTime },
+        },
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          category: true,
+          incurredAt: true,
+        },
+        orderBy: [{ incurredAt: 'desc' }, { createdAt: 'desc' }],
+      }),
+    ]);
 
     const totals: Record<PaymentMethod, number> = {
       CASH: 0,
@@ -183,10 +215,26 @@ export class CashService {
       amount: totals[method],
     }));
 
+    const expenseItems = expenses.map((expense) => ({
+      id: expense.id,
+      description: expense.description,
+      amount: Number(expense.amount),
+      category: expense.category,
+      incurredAt: expense.incurredAt,
+    }));
+    const expensesTotal = this.sumItems(expenseItems);
+    const totalIncome = this.sumAmounts(incomeByMethod);
+
     return {
       incomeByMethod,
-      totalIncome: this.sumAmounts(incomeByMethod),
+      totalIncome,
       ordersCount: payments.length,
+      expenses: {
+        total: expensesTotal,
+        count: expenseItems.length,
+        items: expenseItems,
+      },
+      netIncome: Math.round((totalIncome - expensesTotal) * 100) / 100,
     };
   }
 
@@ -194,6 +242,8 @@ export class CashService {
     closingCash: unknown;
     closingCard: unknown;
     closingYape: unknown;
+    closingExpenses: unknown;
+    expensesCount: unknown;
     countedCash: unknown;
     cashDifference: unknown;
     ordersCount: unknown;
@@ -213,10 +263,19 @@ export class CashService {
       },
     ];
 
+    const totalIncome = this.sumAmounts(incomeByMethod);
+    const expensesTotal = Number(session.closingExpenses ?? 0);
+
     return {
       incomeByMethod,
-      totalIncome: this.sumAmounts(incomeByMethod),
+      totalIncome,
       ordersCount: Number(session.ordersCount ?? 0),
+      expenses: {
+        total: expensesTotal,
+        count: Number(session.expensesCount ?? 0),
+        items: [],
+      },
+      netIncome: Math.round((totalIncome - expensesTotal) * 100) / 100,
       countedCash:
         session.countedCash !== undefined && session.countedCash !== null
           ? Number(session.countedCash)
@@ -233,7 +292,15 @@ export class CashService {
       incomeByMethod: ALL_METHODS.map((method) => ({ method, amount: 0 })),
       totalIncome: 0,
       ordersCount: 0,
+      expenses: { total: 0, count: 0, items: [] },
+      netIncome: 0,
     };
+  }
+
+  private sumItems(items: { amount: number }[]) {
+    return (
+      Math.round(items.reduce((sum, item) => sum + item.amount, 0) * 100) / 100
+    );
   }
 
   private sumAmounts(entries: { method: PaymentMethod; amount: number }[]) {
@@ -250,6 +317,16 @@ export class CashService {
     );
   }
 
+  /** Efectivo esperado = caja chica + efectivo cobrado - gastos del turno. */
+  private expectedCashFor(openingBalance: number, summary: CashSummary): number {
+    return (
+      Math.round(
+        (openingBalance + this.amountFor(summary, 'CASH') - summary.expenses.total) *
+          100,
+      ) / 100
+    );
+  }
+
   private serialize(
     session: {
       id: string;
@@ -261,18 +338,17 @@ export class CashService {
     },
     summary: CashSummary,
   ) {
-    const cashIncome = this.amountFor(summary, 'CASH');
+    const openingBalance = Number(session.openingBalance);
     return {
       id: session.id,
       openedAt: session.openedAt,
       closedAt: session.closedAt,
-      openingBalance: Number(session.openingBalance),
+      openingBalance,
       openedBy: session.openedBy,
       closedBy: session.closedBy,
       summary: {
         ...summary,
-        expectedCash:
-          Math.round((Number(session.openingBalance) + cashIncome) * 100) / 100,
+        expectedCash: this.expectedCashFor(openingBalance, summary),
       },
     };
   }

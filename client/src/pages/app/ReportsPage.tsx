@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import {
   downloadReportsExcel,
+  EXPENSE_CATEGORY_LABEL,
   getApiErrorMessage,
   getReportCash,
   getReportInventory,
@@ -1052,75 +1053,149 @@ function CashTab({
   const cash = query.data!
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Wallet className="size-4 text-primary" />
-          Cierres de caja en el período
-        </CardTitle>
-        <CardDescription>
-          El efectivo esperado es la caja chica más el efectivo cobrado.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {cash.sessions.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No hay cierres de caja en el período.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Apertura</TableHead>
-                  <TableHead>Cierre</TableHead>
-                  <TableHead>Abrió</TableHead>
-                  <TableHead className="text-right">Caja chica</TableHead>
-                  <TableHead className="text-right">Efectivo</TableHead>
-                  <TableHead className="text-right">Tarjeta</TableHead>
-                  <TableHead className="text-right">Yape/Plin</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Pedidos</TableHead>
-                  <TableHead className="text-right">Efectivo esperado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cash.sessions.map((session) => (
-                  <TableRow key={session.id}>
-                    <TableCell>{formatDateTime(session.openedAt)}</TableCell>
-                    <TableCell>
-                      {session.closedAt ? formatDateTime(session.closedAt) : '—'}
-                    </TableCell>
-                    <TableCell>{session.openedBy.name}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(session.openingBalance)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(session.cash)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(session.card)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatCurrency(session.yape)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
-                      {formatCurrency(session.total)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {session.ordersCount}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatCurrency(session.expectedCash)}
-                    </TableCell>
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard
+          label="Ingresos del período"
+          value={formatCurrency(cash.totals.income)}
+          icon={Wallet}
+          sub={`${cash.totals.sessionsCount} cierre(s) de caja`}
+        />
+        <KpiCard
+          label="Gastos del período"
+          value={formatCurrency(cash.totals.expenses)}
+          icon={Receipt}
+          sub={`${cash.totals.expensesCount} gasto(s) registrados`}
+        />
+        <KpiCard
+          label="Resultado neto"
+          value={formatCurrency(cash.totals.netResult)}
+          icon={TrendingUp}
+          accent
+          sub="Ingresos − gastos"
+        />
+      </div>
+
+      {cash.expensesByCategory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Gastos por categoría</CardTitle>
+            <CardDescription>
+              Gastos registrados en el negocio dentro del período.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Categoría</TableHead>
+                    <TableHead className="text-right">Gastos</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                </TableHeader>
+                <TableBody>
+                  {cash.expensesByCategory.map((entry) => (
+                    <TableRow key={entry.category}>
+                      <TableCell className="font-medium">
+                        {EXPENSE_CATEGORY_LABEL[entry.category]}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {entry.count}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(entry.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wallet className="size-4 text-primary" />
+            Cierres de caja en el período
+          </CardTitle>
+          <CardDescription>
+            El efectivo esperado es la caja chica más el efectivo cobrado menos
+            los gastos del turno.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cash.sessions.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No hay cierres de caja en el período.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Apertura</TableHead>
+                    <TableHead>Cierre</TableHead>
+                    <TableHead>Abrió</TableHead>
+                    <TableHead className="text-right">Caja chica</TableHead>
+                    <TableHead className="text-right">Efectivo</TableHead>
+                    <TableHead className="text-right">Tarjeta</TableHead>
+                    <TableHead className="text-right">Yape/Plin</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Gastos</TableHead>
+                    <TableHead className="text-right">Resultado neto</TableHead>
+                    <TableHead className="text-right">Pedidos</TableHead>
+                    <TableHead className="text-right">Efectivo esperado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cash.sessions.map((session) => (
+                    <TableRow key={session.id}>
+                      <TableCell>{formatDateTime(session.openedAt)}</TableCell>
+                      <TableCell>
+                        {session.closedAt ? formatDateTime(session.closedAt) : '—'}
+                      </TableCell>
+                      <TableCell>{session.openedBy.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(session.openingBalance)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(session.cash)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(session.card)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(session.yape)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {formatCurrency(session.total)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">
+                        {session.expenses > 0
+                          ? `− ${formatCurrency(session.expenses)}`
+                          : formatCurrency(0)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {formatCurrency(session.netResult)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {session.ordersCount}
+                      </TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {formatCurrency(session.expectedCash)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 

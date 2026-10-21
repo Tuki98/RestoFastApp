@@ -14,6 +14,7 @@ describe('ExpensesService', () => {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    cashSession: { findFirst: jest.fn() },
   };
   let service: ExpensesService;
 
@@ -28,6 +29,7 @@ describe('ExpensesService', () => {
       note: null,
       registeredById: USER,
       registeredBy: { id: USER, name: 'Gerente' },
+      cashSessionId: null,
       createdAt: new Date('2026-08-16T10:05:00.000Z'),
       updatedAt: new Date('2026-08-16T10:05:00.000Z'),
       ...overrides,
@@ -36,6 +38,7 @@ describe('ExpensesService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    prisma.cashSession.findFirst.mockResolvedValue(null);
     service = new ExpensesService(prisma as never);
   });
 
@@ -95,6 +98,7 @@ describe('ExpensesService', () => {
       });
 
       expect(result.amount).toBe(45.5);
+      expect(result.cashSessionId).toBeNull();
       expect(prisma.expense.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -103,7 +107,32 @@ describe('ExpensesService', () => {
             amount: 45.5,
             category: ExpenseCategory.INSUMOS,
             registeredById: USER,
+            cashSessionId: null,
           }),
+        }),
+      );
+    });
+
+    it('vincula el gasto a la caja abierta si existe', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue({ id: 'c9' });
+      prisma.expense.create.mockResolvedValue(
+        expenseRow({ cashSessionId: 'c9' }),
+      );
+
+      const result = await service.create(ORG, USER, {
+        description: 'Gas',
+        amount: 20,
+      });
+
+      expect(prisma.cashSession.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { organizationId: ORG, closedAt: null },
+        }),
+      );
+      expect(result.cashSessionId).toBe('c9');
+      expect(prisma.expense.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ cashSessionId: 'c9' }),
         }),
       );
     });

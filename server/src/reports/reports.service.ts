@@ -397,37 +397,78 @@ export class ReportsService {
   async cashReport(organizationId: string, dto: ReportsRangeDto) {
     const { from, to } = this.resolveRange(dto);
 
-    const sessions = await this.prisma.cashSession.findMany({
-      where: { organizationId, closedAt: { gte: from, lte: to } },
-      include: {
-        openedBy: { select: { id: true, name: true } },
-        closedBy: { select: { id: true, name: true } },
-      },
-      orderBy: { closedAt: 'desc' },
+    const [sessions, expenses] = await Promise.all([
+      this.prisma.cashSession.findMany({
+        where: { organizationId, closedAt: { gte: from, lte: to } },
+        include: {
+          openedBy: { select: { id: true, name: true } },
+          closedBy: { select: { id: true, name: true } },
+        },
+        orderBy: { closedAt: 'desc' },
+      }),
+      this.prisma.expense.findMany({
+        where: { organizationId, incurredAt: { gte: from, lte: to } },
+        select: { category: true, amount: true },
+      }),
+    ]);
+
+    const expensesTotal = round2(
+      expenses.reduce((sum, e) => sum + Number(e.amount), 0),
+    );
+    const byCategoryMap = new Map<string, { amount: number; count: number }>();
+    for (const expense of expenses) {
+      const entry = byCategoryMap.get(expense.category) ?? {
+        amount: 0,
+        count: 0,
+      };
+      entry.amount = round2(entry.amount + Number(expense.amount));
+      entry.count += 1;
+      byCategoryMap.set(expense.category, entry);
+    }
+    const expensesByCategory = [...byCategoryMap.entries()]
+      .map(([category, value]) => ({ category, ...value }))
+      .sort((a, b) => b.amount - a.amount);
+
+    const sessionRows = sessions.map((session) => {
+      const openingBalance = Number(session.openingBalance);
+      const cash = Number(session.closingCash ?? 0);
+      const card = Number(session.closingCard ?? 0);
+      const yape = Number(session.closingYape ?? 0);
+      const sessionExpenses = Number(session.closingExpenses ?? 0);
+      const income = round2(cash + card + yape);
+      return {
+        id: session.id,
+        openedAt: session.openedAt,
+        closedAt: session.closedAt,
+        openedBy: session.openedBy,
+        closedBy: session.closedBy,
+        openingBalance,
+        cash,
+        card,
+        yape,
+        total: income,
+        expenses: sessionExpenses,
+        netResult: round2(income - sessionExpenses),
+        ordersCount: Number(session.ordersCount ?? 0),
+        expectedCash: round2(openingBalance + cash - sessionExpenses),
+      };
     });
+
+    const incomeTotal = round2(
+      sessionRows.reduce((sum, s) => sum + s.total, 0),
+    );
 
     return {
       range: this.serializeRange({ from, to }),
-      sessions: sessions.map((session) => {
-        const openingBalance = Number(session.openingBalance);
-        const cash = Number(session.closingCash ?? 0);
-        const card = Number(session.closingCard ?? 0);
-        const yape = Number(session.closingYape ?? 0);
-        return {
-          id: session.id,
-          openedAt: session.openedAt,
-          closedAt: session.closedAt,
-          openedBy: session.openedBy,
-          closedBy: session.closedBy,
-          openingBalance,
-          cash,
-          card,
-          yape,
-          total: round2(cash + card + yape),
-          ordersCount: Number(session.ordersCount ?? 0),
-          expectedCash: round2(openingBalance + cash),
-        };
-      }),
+      sessions: sessionRows,
+      totals: {
+        income: incomeTotal,
+        expenses: expensesTotal,
+        expensesCount: expenses.length,
+        netResult: round2(incomeTotal - expensesTotal),
+        sessionsCount: sessionRows.length,
+      },
+      expensesByCategory,
     };
   }
 
@@ -834,6 +875,8 @@ export class ReportsService {
       'Tarjeta',
       'Yape/Plin',
       'Total',
+      'Gastos',
+      'Resultado neto',
       'Pedidos',
       'Efectivo esperado',
     ]);
@@ -848,14 +891,27 @@ export class ReportsService {
         session.card,
         session.yape,
         session.total,
+        session.expenses,
+        session.netResult,
         session.ordersCount,
         session.expectedCash,
       ]);
-      [5, 6, 7, 8, 9, 11].forEach((col) => {
+      [5, 6, 7, 8, 9, 10, 11, 13].forEach((col) => {
         row.getCell(col).numFmt = MONEY_FORMAT;
       });
     });
-    ['G', 'H', 'I', 'J', 'K'].forEach((col) => sheet.getColumn(col).width = 14);
+    sheet.addRow([]);
+    this.headerRow(sheet, ['Resumen del período', 'Monto']);
+    this.kpiSheetRow(sheet, 'Ingresos', cash.totals.income, true);
+    this.kpiSheetRow(sheet, 'Gastos', cash.totals.expenses, true);
+    this.kpiSheetRow(sheet, 'Resultado neto', cash.totals.netResult, true);
+    sheet.addRow([]);
+    this.headerRow(sheet, ['Categoría de gasto', 'Monto', 'Nº gastos']);
+    cash.expensesByCategory.forEach((entry) => {
+      const row = sheet.addRow([entry.category, entry.amount, entry.count]);
+      row.getCell(2).numFmt = MONEY_FORMAT;
+    });
+    ['G', 'H', 'I', 'J', 'K', 'L', 'M'].forEach((col) => sheet.getColumn(col).width = 14);
     sheet.getColumn(1).width = 22;
     sheet.getColumn(2).width = 22;
     sheet.getColumn(3).width = 14;

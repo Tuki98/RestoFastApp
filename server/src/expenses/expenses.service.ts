@@ -38,6 +38,12 @@ export class ExpensesService {
   }
 
   async create(organizationId: string, userId: string, dto: CreateExpenseDto) {
+    const openSession = await this.prisma.cashSession.findFirst({
+      where: { organizationId, closedAt: null },
+      select: { id: true },
+      orderBy: { openedAt: 'desc' },
+    });
+
     const expense = await this.prisma.expense.create({
       data: {
         organizationId,
@@ -47,6 +53,7 @@ export class ExpensesService {
         incurredAt: dto.incurredAt ? new Date(dto.incurredAt) : new Date(),
         note: dto.note?.trim() || null,
         registeredById: userId,
+        cashSessionId: openSession?.id ?? null,
       },
       include: EXPENSE_INCLUDE,
     });
@@ -103,6 +110,7 @@ export class ExpensesService {
     incurredAt: Date;
     note: string | null;
     registeredBy: { id: string; name: string };
+    cashSessionId: string | null;
     createdAt: Date;
   }) {
     return {
@@ -113,6 +121,7 @@ export class ExpensesService {
       incurredAt: expense.incurredAt,
       note: expense.note,
       registeredBy: expense.registeredBy,
+      cashSessionId: expense.cashSessionId,
       createdAt: expense.createdAt,
     };
   }

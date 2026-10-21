@@ -24,6 +24,7 @@ describe('ReportsService', () => {
     orderItem: { findMany: jest.fn() },
     restaurantTable: { count: jest.fn() },
     cashSession: { findMany: jest.fn() },
+    expense: { findMany: jest.fn() },
     inventoryMovement: { findMany: jest.fn() },
     ingredient: { findMany: jest.fn() },
     inventoryLot: { findMany: jest.fn() },
@@ -32,6 +33,7 @@ describe('ReportsService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    prisma.expense.findMany.mockResolvedValue([]);
     service = new ReportsService(prisma as never);
   });
 
@@ -354,7 +356,7 @@ describe('ReportsService', () => {
   });
 
   describe('cashReport', () => {
-    it('mapea los cierres con snapshot de totales', async () => {
+    it('mapea los cierres con snapshot de totales, gastos y resultado neto', async () => {
       prisma.cashSession.findMany.mockResolvedValue([
         {
           id: 'c1',
@@ -364,6 +366,7 @@ describe('ReportsService', () => {
           closingCash: '200.00',
           closingCard: '300.00',
           closingYape: '50.00',
+          closingExpenses: '30.00',
           ordersCount: 5,
           openedBy: { id: 'u1', name: 'Caja' },
           closedBy: { id: 'u2', name: 'Gerente' },
@@ -376,10 +379,16 @@ describe('ReportsService', () => {
           closingCash: null,
           closingCard: null,
           closingYape: null,
+          closingExpenses: null,
           ordersCount: null,
           openedBy: { id: 'u1', name: 'Caja' },
           closedBy: null,
         },
+      ]);
+      prisma.expense.findMany.mockResolvedValue([
+        { category: 'INSUMOS', amount: '20.00' },
+        { category: 'INSUMOS', amount: '10.00' },
+        { category: 'TRANSPORTE', amount: '5.00' },
       ]);
 
       const result = await service.cashReport(ORG, {});
@@ -391,13 +400,28 @@ describe('ReportsService', () => {
         card: 300,
         yape: 50,
         total: 550,
+        expenses: 30,
+        netResult: 520,
         ordersCount: 5,
-        expectedCash: 300,
+        expectedCash: 270,
       });
       expect(result.sessions[1]).toMatchObject({
         total: 0,
+        expenses: 0,
+        netResult: 0,
         expectedCash: 50,
       });
+      expect(result.totals).toEqual({
+        income: 550,
+        expenses: 35,
+        expensesCount: 3,
+        netResult: 515,
+        sessionsCount: 2,
+      });
+      expect(result.expensesByCategory).toEqual([
+        { category: 'INSUMOS', amount: 30, count: 2 },
+        { category: 'TRANSPORTE', amount: 5, count: 1 },
+      ]);
     });
   });
 

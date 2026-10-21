@@ -149,7 +149,7 @@ Módulo de análisis para ADMIN y GERENTE (`reports:view`) en `/app/reports`. To
 - `GET /api/reports/sales-trend` — evolución de ventas por día/semana/mes (`granularity`), más el reparto por día de la semana y por hora.
 - `GET /api/reports/top-products` — platillos más y menos vendidos por ingresos (`limit`, máximo 100) y ventas por categoría con participación.
 - `GET /api/reports/service` — tiempos promedio de cocina y hasta servido, ventas por mesero, ocupación de mesas, pedidos promedio por mesa y ranking de mesas.
-- `GET /api/reports/cash-sessions` — cierres de caja del período con efectivo, tarjeta, Yape/Plin, total y efectivo esperado.
+- `GET /api/reports/cash-sessions` — cierres de caja del período con efectivo, tarjeta, Yape/Plin, total, gastos del turno, resultado neto y efectivo esperado; además de los totales del período y el desglose de gastos por categoría.
 - `GET /api/reports/inventory` — consumo de insumos, stock bajo el mínimo y lotes por vencer (30 días) o vencidos.
 - `GET /api/reports/export` — descarga un Excel (`.xlsx`) con una hoja por cada reporte anterior.
 
@@ -157,7 +157,7 @@ La pantalla de reportes del frontend agrupa todo en pestañas (Resumen, Ventas, 
 
 ## Gastos del negocio
 
-Registro simple de los gastos diarios del negocio (compras, servicios, personal, etc.). Por ahora es independiente de las ventas y de la caja: solo se registra y consulta, no se descuenta del efectivo esperado.
+Registro de los gastos diarios del negocio (compras, servicios, personal, etc.). Los gastos están vinculados a la caja: si hay una caja abierta al registrarlos quedan asociados a esa sesión (`cashSessionId`) y **se descuentan del efectivo esperado** al cerrar la caja.
 
 - `GET /api/expenses?from=&to=&category=` — lista de gastos de la organización (más recientes primero), con filtros opcionales por rango de fechas (`from`/`to` ISO) y categoría.
 - `POST /api/expenses` — registra un gasto (`expenses:manage`). Cuerpo: `{ description, amount, category?, incurredAt?, note? }`.
@@ -165,6 +165,13 @@ Registro simple de los gastos diarios del negocio (compras, servicios, personal,
 - `DELETE /api/expenses/:id` — elimina un gasto (`expenses:manage`).
 
 Categorías disponibles: `INSUMOS`, `SERVICIOS`, `PERSONAL`, `MANTENIMIENTO`, `TRANSPORTE`, `OTROS`. Los montos son `Decimal` y se devuelven como número. Requiere `expenses:manage` (ADMIN y GERENTE). La pantalla `/app/gastos` muestra el total y el conteo del período, filtros por rango (hoy, semana, mes, todo) y categoría, y agrupa los gastos por día con su subtotal.
+
+### Relación con la caja
+
+- **Efectivo esperado** en la caja en curso y al cerrar = `caja chica + efectivo cobrado − gastos del turno`. Los gastos se cuentan por su `incurredAt` dentro de la ventana del turno, así que editar la fecha de un gasto lo mueve de turno.
+- Al cerrar la caja se guarda un snapshot de los gastos del turno (`closingExpenses`, `expensesCount`), por lo que el histórico no cambia si luego se editan o borran gastos.
+- La card **Caja en curso** y el diálogo **Cerrar caja** muestran la lista de gastos del turno y el **resultado neto** (`ingresos − gastos`).
+- El reporte de caja (`GET /api/reports/cash-sessions` y pestaña **Caja** de Reportes) incluye por sesión los gastos y el resultado neto, más los totales del período y el desglose de gastos por categoría. El Excel exportado agrega las columnas de gastos/resultado neto y el desglose por categoría.
 
 ## Reservaciones (pendiente)
 
@@ -202,6 +209,7 @@ En `client/`:
 - En producción se exige `JWT_SECRET` configurado (arranque falla si falta).
 - Contraseñas con bcrypt (coste 10); `passwordHash` nunca se expone en respuestas.
 - El frontend es totalmente responsive (sidebar de escritorio + drawer móvil, diálogos y grids adaptables) y envuelve la app en un `ErrorBoundary` para evitar pantallas en blanco.
+- **Recarga a prueba de balas ante build viejo cacheado**: las rutas usan `lazyWithRetry` (reintenta y, si falla la carga del chunk, recarga la página), `installChunkErrorHandler()` escucha `vite:preloadError`/`unhandledrejection`, y el `ErrorBoundary` detecta fallos de chunk y ofrece **Actualizar** (con guard anti-bucle en `sessionStorage`). En Nginx, `index.html` se sirve con `Cache-Control: no-store` y los assets con hash como `immutable`, así el navegador siempre pide los chunks del build actual.
 
 ## Notas técnicas
 
