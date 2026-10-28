@@ -380,6 +380,14 @@ export async function payOrder(
   return data
 }
 
+export async function addOrderItems(
+  id: string,
+  dto: { items: Array<{ productId: string; quantity: number; notes?: string }> },
+): Promise<Order> {
+  const { data } = await api.post<Order>(`/orders/${id}/items`, dto)
+  return data
+}
+
 export type MovementType = 'IN' | 'OUT'
 
 export type LotAlert = 'EXPIRING_SOON' | 'EXPIRED' | null

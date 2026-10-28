@@ -1,6 +1,7 @@
 export const TAX_RATE = 0.16
 
 export interface CartLine {
+  id?: string
   productId: string
   productName: string
   unitPrice: number

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import {
+  addOrderItems,
   cancelOrder,
   createOrder,
   freeTable,
@@ -43,6 +44,7 @@ import {
 import { formatCurrency } from '@/lib/format'
 import { cn, normalizeSearch } from '@/lib/utils'
 import { playChime } from '@/lib/notifications'
+import { toast } from 'sonner'
 import { toastError } from '@/lib/toast'
 import { printKitchenTicket, useOrganizationName } from '@/lib/print'
 import {
@@ -97,6 +99,8 @@ function PosPage() {
   )
   const [payTarget, setPayTarget] = useState<Order | null>(null)
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null)
+  const [addTarget, setAddTarget] = useState<Order | null>(null)
+  const [addCart, setAddCart] = useState<CartLine[]>([])
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null)
   const [mobileTicketOpen, setMobileTicketOpen] = useState(false)
   const [pendingTarget, setPendingTarget] = useState<Target | null>(null)
@@ -226,6 +230,24 @@ function PosPage() {
     onSuccess: async () => {
       setCancelTarget(null)
       await invalidateOrders()
+    },
+    onError: (error) => toastError(error),
+  })
+
+  const addItemsMutation = useMutation({
+    mutationFn: ({ id, items }: { id: string; items: CartLine[] }) =>
+      addOrderItems(id, {
+        items: items.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          notes: line.notes || undefined,
+        })),
+      }),
+    onSuccess: async () => {
+      setAddTarget(null)
+      setAddCart([])
+      await invalidateOrders()
+      toast.success('Productos agregados a la comanda')
     },
     onError: (error) => toastError(error),
   })
@@ -592,10 +614,23 @@ function PosPage() {
                 canUpdate={canUpdate}
                 canPay={canPay}
                 canCancel={canCancel}
-                busy={markServed.isPending || doCancel.isPending || pay.isPending}
+                canAddItems={
+                  canUpdate &&
+                  !['PAID', 'CANCELLED'].includes(order.status)
+                }
+                busy={
+                  markServed.isPending ||
+                  doCancel.isPending ||
+                  pay.isPending ||
+                  addItemsMutation.isPending
+                }
                 onMarkServed={() => markServed.mutate(order.id)}
                 onCancel={() => setCancelTarget(order)}
                 onPay={() => setPayTarget(order)}
+                onAddItems={() => {
+                  setAddTarget(order)
+                  setAddCart([])
+                }}
               />
             ))}
           </div>
@@ -641,7 +676,223 @@ function PosPage() {
 
       <CreatedDialog order={createdOrder} onClose={() => setCreatedOrder(null)} />
 
-      <Dialog
+            <Dialog
+        open={Boolean(addTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddTarget(null)
+            setAddCart([])
+          }
+        }}
+      >
+        <DialogContent className="flex h-[95dvh] max-h-[95dvh] w-[95vw] max-w-[95vw] flex-col overflow-hidden p-0 sm:h-[90dvh] sm:max-h-[90dvh] sm:w-full sm:max-w-4xl lg:max-w-5xl">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 sm:px-6">
+            <DialogTitle>
+              Agregar productos · Comanda #{addTarget?.folio ?? ''}
+            </DialogTitle>
+            <DialogDescription>
+              {addTarget
+                ? addTarget.orderType === 'DINE_IN' && addTarget.table
+                  ? `Mesa ${addTarget.table.number}`
+                  : 'Para llevar'
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="flex min-h-0 flex-col">
+              <div className="shrink-0 space-y-2 border-b px-4 py-2 sm:px-6">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Buscar producto…"
+                    className="pl-9"
+                  />
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  <CategoryChip
+                    active={categoryId === 'all'}
+                    onClick={() => {
+                      setCategoryId('all')
+                      setQuery('')
+                    }}
+                  >
+                    Todo
+                  </CategoryChip>
+                  {activeCategories.map((c) => (
+                    <CategoryChip
+                      key={c.id}
+                      active={categoryId === c.id}
+                      onClick={() => {
+                        setCategoryId(c.id)
+                        setQuery('')
+                      }}
+                    >
+                      {c.name}
+                    </CategoryChip>
+                  ))}
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4">
+                  {products.map((p) => (
+                    <Button
+                      key={p.id}
+                      variant="outline"
+                      className="h-auto flex-col items-start gap-1 p-3 text-left"
+                      onClick={() => {
+                        setAddCart((prev) =>
+                          mergeLines(prev, {
+                            id: `${p.id}-add-${Date.now()}-${Math.random()}`,
+                            productId: p.id,
+                            productName: p.name,
+                            unitPrice: p.price,
+                            quantity: 1,
+                            notes: '',
+                          }),
+                        )
+                      }}
+                    >
+                      <span className="line-clamp-2 text-sm font-medium">
+                        {p.name}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {formatCurrency(p.price)}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-col border-t lg:border-t-0 lg:border-l">
+              <div className="shrink-0 border-b p-3 sm:p-4">
+                <p className="text-sm font-medium">Productos a agregar</p>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+                {addCart.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Agrega productos desde el catálogo
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {addCart.map((line) => (
+                      <li
+                        key={line.id}
+                        className="flex items-start justify-between gap-2 rounded-md border p-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {line.productName}
+                          </p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="size-7"
+                              onClick={() =>
+                                setAddCart((prev) =>
+                                  prev
+                                    .map((l) =>
+                                      l.id === line.id
+                                        ? { ...l, quantity: Math.max(1, l.quantity - 1) }
+                                        : l,
+                                    )
+                                    .filter((l) => l.quantity > 0),
+                                )
+                              }
+                            >
+                              <Minus className="size-3" />
+                            </Button>
+                            <span className="w-6 text-center text-sm tabular-nums">
+                              {line.quantity}
+                            </span>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              className="size-7"
+                              onClick={() =>
+                                setAddCart((prev) =>
+                                  prev.map((l) =>
+                                    l.id === line.id
+                                      ? { ...l, quantity: Math.min(99, l.quantity + 1) }
+                                      : l,
+                                  ),
+                                )
+                              }
+                            >
+                              <Plus className="size-3" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm tabular-nums">
+                            {formatCurrency(line.unitPrice * line.quantity)}
+                          </p>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-7 text-muted-foreground"
+                            onClick={() =>
+                              setAddCart((prev) =>
+                                prev.filter((l) => l.id !== line.id),
+                              )
+                            }
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="shrink-0 border-t p-3 sm:p-4">
+                <div className="mb-3 flex justify-between text-sm">
+                  <span>Total a agregar</span>
+                  <span className="font-semibold tabular-nums">
+                    {formatCurrency(
+                      addCart.reduce(
+                        (sum, l) => sum + l.unitPrice * l.quantity,
+                        0,
+                      ),
+                    )}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setAddTarget(null)
+                      setAddCart([])
+                    }}
+                    disabled={addItemsMutation.isPending}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    disabled={addCart.length === 0 || addItemsMutation.isPending}
+                    onClick={() => {
+                      if (addTarget && addCart.length > 0) {
+                        addItemsMutation.mutate({ id: addTarget.id, items: addCart })
+                      }
+                    }}
+                  >
+                    {addItemsMutation.isPending && (
+                      <Loader2 className="size-4 animate-spin" />
+                    )}
+                    Confirmar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+<Dialog
         open={Boolean(pendingTarget)}
         onOpenChange={(open) => {
           if (!open) setPendingTarget(null)
@@ -1054,19 +1305,23 @@ function OrderCard({
   canUpdate,
   canPay,
   canCancel,
+  canAddItems,
   busy,
   onMarkServed,
   onCancel,
   onPay,
+  onAddItems,
 }: {
   order: Order
   canUpdate: boolean
   canPay: boolean
   canCancel: boolean
+  canAddItems: boolean
   busy: boolean
   onMarkServed: () => void
   onCancel: () => void
   onPay: () => void
+  onAddItems: () => void
 }) {
   const badge = ORDER_STATUS_BADGE[order.status]
   return (
@@ -1126,6 +1381,11 @@ function OrderCard({
           {order.status === 'READY' && canUpdate && (
             <Button size="sm" onClick={onMarkServed} disabled={busy}>
               Marcar servida
+            </Button>
+          )}
+          {canAddItems && (
+            <Button size="sm" variant="outline" onClick={onAddItems} disabled={busy}>
+              Agregar productos
             </Button>
           )}
           {canPay && (

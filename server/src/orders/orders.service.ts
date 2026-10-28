@@ -312,6 +312,89 @@ export class OrdersService {
     });
   }
 
+  async addItems(
+    organizationId: string,
+    id: string,
+    dto: { items: Array<{ productId: string; quantity: number; notes?: string }> },
+  ) {
+    const order = await this.getOrder(id, organizationId);
+    if (order.status === 'PAID') {
+      throw new BadRequestException('No se puede agregar productos a una orden pagada');
+    }
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('No se puede agregar productos a una orden cancelada');
+    }
+
+    const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds }, organizationId },
+    });
+    if (products.length !== productIds.length) {
+      throw new BadRequestException('Uno o más productos no existen');
+    }
+
+    const byId = new Map(products.map((product) => [product.id, product]));
+    const itemsToAdd = dto.items.map((item) => {
+      const product = byId.get(item.productId);
+      if (!product) {
+        throw new BadRequestException('Uno o más productos no existen');
+      }
+      return {
+        productId: product.id,
+        productName: product.name,
+        unitPrice: Number(product.price),
+        quantity: item.quantity,
+        notes: item.notes?.trim() || null,
+      };
+    });
+
+    const addedSubtotalCents = itemsToAdd.reduce(
+      (sum, item) => sum + Math.round(item.unitPrice * 100) * item.quantity,
+      0,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.orderItem.createMany({
+        data: itemsToAdd.map((item) => ({
+          orderId: id,
+          productId: item.productId,
+          productName: item.productName,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          notes: item.notes,
+        })),
+      });
+
+      const currentOrder = await tx.order.findUniqueOrThrow({
+        where: { id },
+        select: { subtotal: true },
+      });
+      const subtotalCents = Math.round(Number(currentOrder.subtotal) * 100) + addedSubtotalCents;
+      const taxCents = Math.round(subtotalCents * TAX_RATE);
+      const totalCents = subtotalCents + taxCents;
+
+      const updated = await tx.order.update({
+        where: { id },
+        data: {
+          subtotal: subtotalCents / 100,
+          tax: taxCents / 100,
+          total: totalCents / 100,
+        },
+        include: {
+          items: { orderBy: { id: 'asc' } },
+          table: { select: { id: true, number: true, section: true } },
+          createdBy: { select: { id: true, name: true } },
+          statusHistory: {
+            orderBy: { changedAt: 'asc' },
+            select: { status: true, changedAt: true },
+          },
+        },
+      });
+
+      return this.serialize(updated);
+    });
+  }
+
   /** Órdenes abiertas de una mesa (para continuar o cobrar desde el POS). */
   async findOpenByTable(organizationId: string, tableId: string) {
     const orders = await this.prisma.order.findMany({

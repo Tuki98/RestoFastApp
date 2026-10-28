@@ -56,7 +56,7 @@ export class CashService {
 
     return this.serialize(
       session,
-      await this.liveSummary(organizationId, session.openedAt),
+      await this.liveSummary(organizationId, session.openedAt, undefined, session.id),
     );
   }
 
@@ -126,6 +126,7 @@ export class CashService {
       organizationId,
       session.openedAt,
       now,
+      session.id,
     );
 
     const expectedCash = this.expectedCashFor(
@@ -171,10 +172,15 @@ export class CashService {
   }
 
   /** Total por método de pago de los cobros dentro de la ventana [openedAt, to). */
-  private async liveSummary(organizationId: string, openedAt: Date, to?: Date) {
+  private async liveSummary(
+    organizationId: string,
+    openedAt: Date,
+    to?: Date,
+    sessionId?: string,
+  ) {
     const closeTime = to ?? new Date();
 
-    const [payments, expenses] = await Promise.all([
+    const [payments, expensesBySession, expensesByWindow] = await Promise.all([
       this.prisma.payment.findMany({
         where: {
           order: { organizationId },
@@ -182,6 +188,22 @@ export class CashService {
         },
         select: { method: true, amount: true },
       }),
+      sessionId
+        ? this.prisma.expense.findMany({
+            where: {
+              organizationId,
+              cashSessionId: sessionId,
+            },
+            select: {
+              id: true,
+              description: true,
+              amount: true,
+              category: true,
+              incurredAt: true,
+            },
+            orderBy: [{ incurredAt: 'desc' }, { createdAt: 'desc' }],
+          })
+        : Promise.resolve([]),
       this.prisma.expense.findMany({
         where: {
           organizationId,
@@ -197,6 +219,21 @@ export class CashService {
         orderBy: [{ incurredAt: 'desc' }, { createdAt: 'desc' }],
       }),
     ]);
+
+    const expensesMap = new Map<string, typeof expensesBySession[0]>();
+    for (const expense of expensesBySession) {
+      expensesMap.set(expense.id, expense);
+    }
+    for (const expense of expensesByWindow) {
+      if (!expensesMap.has(expense.id)) {
+        expensesMap.set(expense.id, expense);
+      }
+    }
+    const expenses = Array.from(expensesMap.values()).sort(
+      (a, b) =>
+        new Date(b.incurredAt).getTime() - new Date(a.incurredAt).getTime() ||
+        0,
+    );
 
     const totals: Record<PaymentMethod, number> = {
       CASH: 0,
@@ -218,19 +255,19 @@ export class CashService {
     const expenseItems = expenses.map((expense) => ({
       id: expense.id,
       description: expense.description,
-      amount: Number(expense.amount),
+      amount: Math.round(Number(expense.amount) * 100) / 100,
       category: expense.category,
       incurredAt: expense.incurredAt,
     }));
     const expensesTotal = this.sumItems(expenseItems);
-    const totalIncome = this.sumAmounts(incomeByMethod);
+    const totalIncome = Math.round(this.sumAmounts(incomeByMethod) * 100) / 100;
 
     return {
       incomeByMethod,
       totalIncome,
       ordersCount: payments.length,
       expenses: {
-        total: expensesTotal,
+        total: Math.round(expensesTotal * 100) / 100,
         count: expenseItems.length,
         items: expenseItems,
       },

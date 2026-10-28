@@ -17,6 +17,7 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { PayOrderDto } from './dto/pay-order.dto';
+import { AddOrderItemsDto } from './dto/add-order-items.dto';
 
 const ANY_ORDER_VIEW = [
   'orders:create',
@@ -97,5 +98,15 @@ export class OrdersController {
     @CurrentUser('id') userId: string,
   ) {
     return this.ordersService.pay(organizationId, id, dto, userId);
+  }
+
+  @Post(':id/items')
+  @RequirePermissions('orders:update')
+  addItems(
+    @CurrentUser('organizationId') organizationId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddOrderItemsDto,
+  ) {
+    return this.ordersService.addItems(organizationId, id, dto);
   }
 }
