@@ -44,3 +44,18 @@ export const OPEN_STATUSES: OrderStatus[] = [
   'SERVED',
   'AWAITING_CONFIRMATION',
 ]
+
+/**
+ * Orden sugerido para mostrar las comandas abiertas:
+ * primero las que piden por QR por atender, luego las que entran a cocina,
+ * las listas para servir, las servidas (por cobrar) y el resto.
+ */
+export const ORDER_STATUS_SORT_ORDER: Record<OrderStatus, number> = {
+  AWAITING_CONFIRMATION: 0,
+  PENDING: 1,
+  IN_PREPARATION: 2,
+  READY: 3,
+  SERVED: 4,
+  PAID: 5,
+  CANCELLED: 6,
+}

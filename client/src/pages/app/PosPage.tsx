@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BellRing,
   CheckCircle2,
+  Clock,
   Loader2,
   Minus,
   Plus,
@@ -30,6 +31,7 @@ import {
 import type {
   MenuProduct,
   Order,
+  OrderStatus,
   PaymentMethod,
   RestaurantTable,
 } from '@/lib/api'
@@ -38,6 +40,7 @@ import type { CartLine } from '@/lib/cart'
 import {
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
+  ORDER_STATUS_SORT_ORDER,
   OPEN_STATUSES,
   PAYMENT_METHOD_LABEL,
 } from '@/lib/orderStatus'
@@ -57,6 +60,13 @@ import { useAuthStore } from '@/stores/authStore'
 import { OrderStatusTimeline } from '@/components/OrderStatusTimeline'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -74,6 +84,8 @@ import ConfirmDeleteDialog from '@/components/ConfirmDeleteDialog'
 
 type Target = { kind: 'TABLE'; table: RestaurantTable } | { kind: 'TAKEOUT' }
 
+type OrderSort = 'arrival' | 'table' | 'status'
+
 function targetLabel(target: Target): string {
   return target.kind === 'TABLE' ? `Mesa ${target.table.number}` : 'Para llevar'
 }
@@ -85,6 +97,18 @@ function formatTime(iso: string): string {
   })
 }
 
+function formatElapsed(iso: string): string {
+  const startedAt = new Date(iso).getTime()
+  const minutes = Math.max(0, Math.floor((Date.now() - startedAt) / 60000))
+  if (minutes < 1) return 'recién'
+  if (minutes < 60) return `hace ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return `hace ${hours} h ${rest ? `${rest} min` : ''}`.trim()
+  const days = Math.floor(hours / 24)
+  return `hace ${days} d ${hours % 24} h`.trim()
+}
+
 function PosPage() {
   const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
@@ -94,6 +118,8 @@ function PosPage() {
   )
   const [categoryId, setCategoryId] = useState('all')
   const [query, setQuery] = useState('')
+  const [orderSort, setOrderSort] = useState<OrderSort>('arrival')
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL')
   const [orderNotes, setOrderNotes] = useState(
     () => loadPosDraft()?.orderNotes ?? '',
   )
@@ -166,10 +192,30 @@ function PosPage() {
 
   const totals = useMemo(() => computeTotals(lines), [lines])
 
-  const activeOrders = useMemo(
-    () => (orders.data ?? []).filter((o) => OPEN_STATUSES.includes(o.status)),
-    [orders.data],
-  )
+  const activeOrders = useMemo(() => {
+    const openOrders = (orders.data ?? []).filter((o) =>
+      OPEN_STATUSES.includes(o.status),
+    )
+    const filtered =
+      statusFilter === 'ALL'
+        ? openOrders
+        : openOrders.filter((o) => o.status === statusFilter)
+    return [...filtered].sort((a, b) => {
+      if (orderSort === 'status') {
+        const statusDiff =
+          ORDER_STATUS_SORT_ORDER[a.status] - ORDER_STATUS_SORT_ORDER[b.status]
+        if (statusDiff !== 0) return statusDiff
+      }
+      if (orderSort === 'table') {
+        const tableA = a.table?.number ?? Number.MAX_SAFE_INTEGER
+        const tableB = b.table?.number ?? Number.MAX_SAFE_INTEGER
+        if (tableA !== tableB) return tableA - tableB
+      }
+      return (
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      )
+    })
+  }, [orders.data, orderSort, statusFilter])
 
   const awaitingOrders = useMemo(
     () => (orders.data ?? []).filter((o) => o.status === 'AWAITING_CONFIRMATION'),
@@ -596,9 +642,45 @@ function PosPage() {
       />
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight">
-          Órdenes activas
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">
+            Órdenes activas
+          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={orderSort}
+              onValueChange={(value) => setOrderSort(value as OrderSort)}
+            >
+              <SelectTrigger size="sm" className="w-[180px]" aria-label="Ordenar comandas">
+                <SelectValue placeholder="Ordenar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="arrival">Orden de llegada</SelectItem>
+                <SelectItem value="table">Por mesa</SelectItem>
+                <SelectItem value="status">Por estado</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={statusFilter === 'ALL' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setStatusFilter('ALL')}
+              >
+                Todas
+              </Button>
+              {OPEN_STATUSES.map((status) => (
+                <Button
+                  key={status}
+                  variant={statusFilter === status ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setStatusFilter(status)}
+                >
+                  {ORDER_STATUS_LABEL[status]}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
         {orders.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : activeOrders.length === 0 ? (
@@ -1324,6 +1406,13 @@ function OrderCard({
   onAddItems: () => void
 }) {
   const badge = ORDER_STATUS_BADGE[order.status]
+  const elapsedMinutes = Math.max(
+    0,
+    Math.floor(
+      (Date.now() - new Date(order.createdAt).getTime()) / 60000,
+    ),
+  )
+  const isLongWait = elapsedMinutes > 15
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -1343,6 +1432,16 @@ function OrderCard({
               {ORDER_STATUS_LABEL[order.status]}
             </Badge>
             <span>{formatTime(order.createdAt)}</span>
+            <span
+              className={cn(
+                'flex items-center gap-1',
+                isLongWait &&
+                  'font-medium text-amber-600 dark:text-amber-400',
+              )}
+            >
+              <Clock className="size-3" />
+              {formatElapsed(order.createdAt)}
+            </span>
             {order.createdBy && <span>· {order.createdBy.name}</span>}
           </div>
         </div>
