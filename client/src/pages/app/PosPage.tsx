@@ -4,6 +4,8 @@ import {
   BellRing,
   CheckCircle2,
   Clock,
+  LayoutGrid,
+  ListOrdered,
   Loader2,
   Minus,
   Plus,
@@ -113,6 +115,7 @@ function formatElapsed(iso: string): string {
 function PosPage() {
   const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
+  const [activeView, setActiveView] = useState<'menu' | 'orders'>('menu')
   const [target, setTarget] = useState<Target | null>(null)
   const [lines, setLines] = useState<CartLine[]>(
     () => loadPosDraft()?.lines ?? [],
@@ -476,7 +479,35 @@ function PosPage() {
   }
 
   return (
-    <div className="space-y-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <div className="flex gap-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <aside className="hidden w-16 shrink-0 flex-col items-center gap-2 border-r py-4 lg:flex">
+        <Button
+          variant={activeView === 'menu' ? 'default' : 'ghost'}
+          size="icon"
+          className="size-10"
+          onClick={() => setActiveView('menu')}
+          title="Carta"
+        >
+          <LayoutGrid className="size-5" />
+          <span className="sr-only">Carta</span>
+        </Button>
+        <Button
+          variant={activeView === 'orders' ? 'default' : 'ghost'}
+          size="icon"
+          className="size-10 relative"
+          onClick={() => setActiveView('orders')}
+          title="Comandas"
+        >
+          <ListOrdered className="size-5" />
+          {activeOrders.length > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
+              {activeOrders.length}
+            </span>
+          )}
+          <span className="sr-only">Comandas</span>
+        </Button>
+      </aside>
+      <div className="min-w-0 flex-1 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Punto de venta</h1>
         <p className="text-sm text-muted-foreground">
@@ -532,120 +563,148 @@ function PosPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="min-w-0 space-y-4">
-          <TargetSelector
-            tables={tables.data ?? []}
-            selected={target}
-            onSelect={handleSelectTarget}
-            onFree={(id) => freeTableMutation.mutate(id)}
-          />
+      <div className="lg:hidden flex gap-2">
+        <Button
+          variant={activeView === 'menu' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActiveView('menu')}
+          className="flex-1"
+        >
+          <LayoutGrid className="size-4 mr-2" />
+          Carta
+        </Button>
+        <Button
+          variant={activeView === 'orders' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setActiveView('orders')}
+          className="flex-1 relative"
+        >
+          <ListOrdered className="size-4 mr-2" />
+          Comandas
+          {activeOrders.length > 0 && (
+            <span className="ml-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary-foreground px-1 text-[10px] text-primary">
+              {activeOrders.length}
+            </span>
+          )}
+        </Button>
+      </div>
 
-          {activeCategories.length === 0 ? (
-            <Card>
-              <CardContent className="flex h-40 flex-col items-center justify-center gap-2 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Aún no hay categorías activas en el menú.
-                </p>
+      {activeView === 'menu' && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="min-w-0 space-y-4">
+            <TargetSelector
+              tables={tables.data ?? []}
+              selected={target}
+              onSelect={handleSelectTarget}
+              onFree={(id) => freeTableMutation.mutate(id)}
+            />
+
+            {activeCategories.length === 0 ? (
+              <Card>
+                <CardContent className="flex h-40 flex-col items-center justify-center gap-2 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Aún no hay categorías activas en el menú.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Activa categorías y productos desde la sección Menú.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && normalizedQuery) {
+                        e.preventDefault()
+                        const first = products[0]
+                        if (first) addProduct(first)
+                      }
+                    }}
+                    placeholder="Buscar producto…"
+                    className="pl-9"
+                    aria-label="Buscar producto"
+                  />
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Activa categorías y productos desde la sección Menú.
+                  Enter agrega el primer resultado · 1-9 cambia de categoría
                 </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && normalizedQuery) {
-                      e.preventDefault()
-                      const first = products[0]
-                      if (first) addProduct(first)
-                    }
-                  }}
-                  placeholder="Buscar producto…"
-                  className="pl-9"
-                  aria-label="Buscar producto"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Enter agrega el primer resultado · 1-9 cambia de categoría
-              </p>
 
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <CategoryChip
-                  active={categoryId === 'all'}
-                  onClick={() => {
-                    setCategoryId('all')
-                    setQuery('')
-                  }}
-                >
-                  Todo
-                </CategoryChip>
-                {activeCategories.map((c) => (
+                <div className="flex gap-2 overflow-x-auto pb-1">
                   <CategoryChip
-                    key={c.id}
-                    active={categoryId === c.id}
+                    active={categoryId === 'all'}
                     onClick={() => {
-                      setCategoryId(c.id)
+                      setCategoryId('all')
                       setQuery('')
                     }}
                   >
-                    {c.name}
+                    Todo
                   </CategoryChip>
-                ))}
-              </div>
-
-              {products.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  {normalizedQuery
-                    ? `Sin resultados para «${query.trim()}».`
-                    : 'No hay productos activos en esta categoría.'}
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                  {products.map((p) => (
-                    <Button
-                      key={p.id}
-                      variant="outline"
-                      className="h-auto flex-col items-start gap-1 p-3 text-left"
-                      onClick={() => addProduct(p)}
+                  {activeCategories.map((c) => (
+                    <CategoryChip
+                      key={c.id}
+                      active={categoryId === c.id}
+                      onClick={() => {
+                        setCategoryId(c.id)
+                        setQuery('')
+                      }}
                     >
-                      <span className="line-clamp-2 text-sm font-medium">
-                        {p.name}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {formatCurrency(p.price)}
-                      </span>
-                    </Button>
+                      {c.name}
+                    </CategoryChip>
                   ))}
                 </div>
-              )}
-            </>
-          )}
-        </section>
 
-        <aside className="hidden lg:block">
-          <TicketCard
-            target={target}
-            lines={lines}
-            totals={totals}
-            orderNotes={orderNotes}
-            openOrders={openForTable.data ?? []}
-            isSubmitting={create.isPending}
-            error={create.error}
-            cajaAbierta={cajaAbierta}
-            onNotesChange={setOrderNotes}
-            onQuantity={setQuantity}
-            onLineNotes={setLineNotes}
-            onRemoveLine={removeLine}
-            onSubmit={handleSubmit}
-          />
-        </aside>
-      </div>
+                {products.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    {normalizedQuery
+                      ? `Sin resultados para «${query.trim()}».`
+                      : 'No hay productos activos en esta categoría.'}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    {products.map((p) => (
+                      <Button
+                        key={p.id}
+                        variant="outline"
+                        className="h-auto flex-col items-start gap-1 p-3 text-left"
+                        onClick={() => addProduct(p)}
+                      >
+                        <span className="line-clamp-2 text-sm font-medium">
+                          {p.name}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          {formatCurrency(p.price)}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
+          <aside className="hidden lg:block">
+            <TicketCard
+              target={target}
+              lines={lines}
+              totals={totals}
+              orderNotes={orderNotes}
+              openOrders={openForTable.data ?? []}
+              isSubmitting={create.isPending}
+              error={create.error}
+              cajaAbierta={cajaAbierta}
+              onNotesChange={setOrderNotes}
+              onQuantity={setQuantity}
+              onLineNotes={setLineNotes}
+              onRemoveLine={removeLine}
+              onSubmit={handleSubmit}
+            />
+          </aside>
+        </div>
+      )}
 
       <MobileTicketSheet
         open={mobileTicketOpen}
@@ -665,83 +724,87 @@ function PosPage() {
         onSubmit={handleSubmit}
       />
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold tracking-tight">
-            Órdenes activas
-          </h2>
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={orderSort}
-              onValueChange={(value) => setOrderSort(value as OrderSort)}
-            >
-              <SelectTrigger size="sm" className="w-[180px]" aria-label="Ordenar comandas">
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="arrival">Orden de llegada</SelectItem>
-                <SelectItem value="table">Por mesa</SelectItem>
-                <SelectItem value="status">Por estado</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={statusFilter === 'ALL' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setStatusFilter('ALL')}
+      {activeView === 'orders' && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Órdenes activas
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={orderSort}
+                onValueChange={(value) => setOrderSort(value as OrderSort)}
               >
-                Todas
-              </Button>
-              {OPEN_STATUSES.map((status) => (
+                <SelectTrigger size="sm" className="w-[180px]" aria-label="Ordenar comandas">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="arrival">Orden de llegada</SelectItem>
+                  <SelectItem value="table">Por mesa</SelectItem>
+                  <SelectItem value="status">Por estado</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap gap-2">
                 <Button
-                  key={status}
-                  variant={statusFilter === status ? 'default' : 'outline'}
+                  variant={statusFilter === 'ALL' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setStatusFilter(status)}
+                  onClick={() => setStatusFilter('ALL')}
                 >
-                  {ORDER_STATUS_LABEL[status]}
+                  Todas
                 </Button>
-              ))}
+                {OPEN_STATUSES.map((status) => (
+                  <Button
+                    key={status}
+                    variant={statusFilter === status ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setStatusFilter(status)}
+                  >
+                    {ORDER_STATUS_LABEL[status]}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-        {orders.isLoading ? (
-          <Skeleton className="h-40 w-full" />
-        ) : activeOrders.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay órdenes abiertas en este momento.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {activeOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                canUpdate={canUpdate}
-                canPay={canPay}
-                canCancel={canCancel}
-                canAddItems={
-                  canUpdate &&
-                  !['PAID', 'CANCELLED'].includes(order.status)
-                }
-                busy={
-                  markServed.isPending ||
-                  doCancel.isPending ||
-                  pay.isPending ||
-                  addItemsMutation.isPending
-                }
-                onMarkServed={() => markServed.mutate(order.id)}
-                onCancel={() => setCancelTarget(order)}
-                onPay={() => setPayTarget(order)}
-                onAddItems={() => {
-                  setAddTarget(order)
-                  setAddCart([])
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+          {orders.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : activeOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No hay órdenes abiertas en este momento.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {activeOrders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  canUpdate={canUpdate}
+                  canPay={canPay}
+                  canCancel={canCancel}
+                  canAddItems={
+                    canUpdate &&
+                    !['PAID', 'CANCELLED'].includes(order.status)
+                  }
+                  busy={
+                    markServed.isPending ||
+                    doCancel.isPending ||
+                    pay.isPending ||
+                    addItemsMutation.isPending
+                  }
+                  onMarkServed={() => markServed.mutate(order.id)}
+                  onCancel={() => setCancelTarget(order)}
+                  onPay={() => setPayTarget(order)}
+                  onAddItems={() => {
+                    setAddTarget(order)
+                    setAddCart([])
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      </div>
 
       <PayDialog
         key={payTarget?.id ?? 'none'}
@@ -1032,29 +1095,31 @@ function PosPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-card px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg lg:hidden">
-        <div className="mx-auto flex max-w-2xl items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {target ? targetLabel(target) : 'Selecciona mesa o para llevar'}
-            </p>
-            <p className="truncate text-sm text-muted-foreground tabular-nums">
-              {lines.length > 0
-                ? `${totals.itemCount} artículo${totals.itemCount === 1 ? '' : 's'} · ${formatCurrency(totals.total)}`
-                : 'Comanda vacía'}
-            </p>
+      {activeView === 'menu' && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-card px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg lg:hidden">
+          <div className="mx-auto flex max-w-2xl items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">
+                {target ? targetLabel(target) : 'Selecciona mesa o para llevar'}
+              </p>
+              <p className="truncate text-sm text-muted-foreground tabular-nums">
+                {lines.length > 0
+                  ? `${totals.itemCount} artículo${totals.itemCount === 1 ? '' : 's'} · ${formatCurrency(totals.total)}`
+                  : 'Comanda vacía'}
+              </p>
+            </div>
+            <Button
+              size="lg"
+              className="shrink-0"
+              disabled={!target || lines.length === 0}
+              onClick={() => setMobileTicketOpen(true)}
+            >
+              <ReceiptText className="size-4" />
+              Ver comanda
+            </Button>
           </div>
-          <Button
-            size="lg"
-            className="shrink-0"
-            disabled={!target || lines.length === 0}
-            onClick={() => setMobileTicketOpen(true)}
-          >
-            <ReceiptText className="size-4" />
-            Ver comanda
-          </Button>
         </div>
-      </div>
+      )}
     </div>
   )
 }
