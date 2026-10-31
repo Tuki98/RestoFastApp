@@ -93,6 +93,16 @@ export class OrdersService {
       );
     }
 
+    const session = await this.prisma.cashSession.findFirst({
+      where: { closedAt: null, organizationId },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!session) {
+      throw new BadRequestException(
+        'No hay una caja abierta. Abre la caja para crear comandas.',
+      );
+    }
+
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, organizationId },
@@ -133,9 +143,19 @@ export class OrdersService {
     const taxCents = 0;
 
     return this.prisma.$transaction(async (tx) => {
+      // Folio del turno: 1, 2, 3... por cada caja abierta. El incremento
+      // atómico sobre la sesión garantiza folios consecutivos sin condiciones
+      // de carrera entre cajeros.
+      const sessionUpdated = await tx.cashSession.update({
+        where: { id: session.id },
+        data: { nextFolio: { increment: 1 } },
+      });
+
       const order = await tx.order.create({
         data: {
           organizationId,
+          folio: sessionUpdated.nextFolio,
+          cashSessionId: session.id,
           orderType: dto.orderType,
           tableId: dto.tableId ?? null,
           notes: dto.notes?.trim() || null,

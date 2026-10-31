@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicCreateOrderDto } from './dto/public-create-order.dto';
@@ -91,6 +91,16 @@ export class PublicMenuService {
   async createOrderForTable(token: string, dto: PublicCreateOrderDto) {
     const table = await this.getTableByToken(token);
 
+    const session = await this.prisma.cashSession.findFirst({
+      where: { closedAt: null, organizationId: table.organizationId },
+      orderBy: { openedAt: 'desc' },
+    });
+    if (!session) {
+      throw new BadRequestException(
+        'El restaurante no está atendiendo en este momento. Solicita ayuda a un mesero para tu pedido.',
+      );
+    }
+
     const productIds = [...new Set(dto.items.map((item) => item.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, organizationId: table.organizationId },
@@ -123,9 +133,16 @@ export class PublicMenuService {
     const customerToken = randomBytes(16).toString('hex');
 
     const order = await this.prisma.$transaction(async (tx) => {
+      const sessionUpdated = await tx.cashSession.update({
+        where: { id: session.id },
+        data: { nextFolio: { increment: 1 } },
+      });
+
       const created = await tx.order.create({
         data: {
           organizationId: table.organizationId,
+          folio: sessionUpdated.nextFolio,
+          cashSessionId: session.id,
           orderType: 'DINE_IN',
           tableId: table.id,
           notes: dto.notes?.trim() || null,

@@ -22,6 +22,7 @@ import {
   freeTable,
   getApiErrorMessage,
   getCategories,
+  getCurrentCashSession,
   getOpenOrdersByTable,
   getOrders,
   getTables,
@@ -182,6 +183,14 @@ function PosPage() {
     queryFn: () => getOrders(),
     refetchInterval: 5_000,
   })
+
+  const cashSession = useQuery({
+    queryKey: ['cash-sessions', 'current'],
+    queryFn: getCurrentCashSession,
+    refetchInterval: 15_000,
+  })
+
+  const cajaAbierta = Boolean(cashSession.data)
 
   const tableId = target?.kind === 'TABLE' ? target.table.id : undefined
   const openForTable = useQuery({
@@ -371,6 +380,7 @@ function PosPage() {
 
   function handleSubmit() {
     if (!target || lines.length === 0) return
+    if (!cajaAbierta) return
     create.mutate({
       orderType: target.kind === 'TABLE' ? 'DINE_IN' : 'TAKEOUT',
       tableId: target.kind === 'TABLE' ? target.table.id : undefined,
@@ -473,6 +483,18 @@ function PosPage() {
           Arma la comanda, envíala a cocina y cobra al finalizar.
         </p>
       </div>
+
+      {!cajaAbierta && (
+        <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm dark:border-amber-500 dark:bg-amber-950/40">
+          <p className="font-semibold text-amber-900 dark:text-amber-200">
+            La caja está cerrada
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Abre la caja desde la sección Caja para poder armar y enviar
+            comandas.
+          </p>
+        </div>
+      )}
 
       {awaitingOrders.length > 0 && (
         <div className="space-y-2">
@@ -615,6 +637,7 @@ function PosPage() {
             openOrders={openForTable.data ?? []}
             isSubmitting={create.isPending}
             error={create.error}
+            cajaAbierta={cajaAbierta}
             onNotesChange={setOrderNotes}
             onQuantity={setQuantity}
             onLineNotes={setLineNotes}
@@ -634,6 +657,7 @@ function PosPage() {
         openOrders={openForTable.data ?? []}
         isSubmitting={create.isPending}
         error={create.error}
+        cajaAbierta={cajaAbierta}
         onNotesChange={setOrderNotes}
         onQuantity={setQuantity}
         onLineNotes={setLineNotes}
@@ -1129,6 +1153,7 @@ function TicketCard({
   openOrders,
   isSubmitting,
   error,
+  cajaAbierta,
   onNotesChange,
   onQuantity,
   onLineNotes,
@@ -1157,6 +1182,7 @@ function TicketCard({
           openOrders={openOrders}
           isSubmitting={isSubmitting}
           error={error}
+          cajaAbierta={cajaAbierta}
           onNotesChange={onNotesChange}
           onQuantity={onQuantity}
           onLineNotes={onLineNotes}
@@ -1176,6 +1202,7 @@ interface TicketBodyProps {
   openOrders: Order[]
   isSubmitting: boolean
   error: Error | null
+  cajaAbierta?: boolean
   onNotesChange: (value: string) => void
   onQuantity: (productId: string, quantity: number) => void
   onLineNotes: (productId: string, notes: string) => void
@@ -1191,6 +1218,7 @@ function TicketBody({
   openOrders,
   isSubmitting,
   error,
+  cajaAbierta = true,
   onNotesChange,
   onQuantity,
   onLineNotes,
@@ -1336,7 +1364,7 @@ function TicketBody({
 
           <Button
             className="w-full"
-            disabled={!target || lines.length === 0 || isSubmitting}
+            disabled={!target || lines.length === 0 || isSubmitting || !cajaAbierta}
             onClick={onSubmit}
           >
             {isSubmitting && <Loader2 className="size-4 animate-spin" />}

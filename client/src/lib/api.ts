@@ -298,6 +298,7 @@ export interface OrderItem {
 export interface Order {
   id: string
   folio: number
+  cashSessionId?: string | null
   orderType: OrderType
   tableId: string | null
   table: { id: string; number: number; section: string } | null
@@ -638,6 +639,7 @@ export interface CashSession {
   openedAt: string
   closedAt: string | null
   openingBalance: number
+  nextFolio?: number
   openedBy: { id: string; name: string }
   closedBy: { id: string; name: string } | null
   summary: CashSummary

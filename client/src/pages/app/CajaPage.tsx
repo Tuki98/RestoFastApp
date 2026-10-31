@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Banknote,
@@ -20,9 +20,11 @@ import {
   getApiErrorMessage,
   getCashSessions,
   getCurrentCashSession,
+  getOrders,
   openCashSession,
   type CashMethod,
   type CashSession,
+  type Order,
 } from '@/lib/api'
 import { PAYMENT_METHOD_LABEL } from '@/lib/orderStatus'
 import { formatCurrency, formatDateTime } from '@/lib/format'
@@ -79,6 +81,20 @@ function CajaPage() {
     queryFn: getCashSessions,
     refetchInterval: 30_000,
   })
+
+  const ordersQuery = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => getOrders(),
+    refetchInterval: 10_000,
+  })
+
+  const openOrders = useMemo(
+    () =>
+      (ordersQuery.data ?? []).filter(
+        (o) => o.status !== 'PAID' && o.status !== 'CANCELLED',
+      ),
+    [ordersQuery.data],
+  )
 
   const openCash = useMutation({
     mutationFn: (openingBalance: number) => openCashSession(openingBalance),
@@ -182,6 +198,7 @@ function CajaPage() {
 
       <CloseCashDialog
         session={closeTarget}
+        openOrders={openOrders}
         isSubmitting={closeCash.isPending}
         error={closeCash.error}
         onOpenChange={(open) => {
@@ -370,12 +387,14 @@ function ActiveCashCard({
 
 function CloseCashDialog({
   session,
+  openOrders,
   isSubmitting,
   error,
   onOpenChange,
   onConfirm,
 }: {
   session: CashSession | null
+  openOrders: Order[]
   isSubmitting: boolean
   error: Error | null
   onOpenChange: (open: boolean) => void
@@ -595,6 +614,32 @@ function CloseCashDialog({
           </div>
         )}
 
+        {openOrders.length > 0 && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+            <p className="font-medium text-destructive">
+              No se puede cerrar la caja con comandas sin cobrar.
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Cierra o cobra las comandas pendientes antes de cerrar el turno:
+            </p>
+            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+              {openOrders.map((order) => (
+                <li
+                  key={order.id}
+                  className="flex items-center justify-between gap-2 text-sm"
+                >
+                  <span>
+                    Comanda #{order.folio} · {order.status}
+                  </span>
+                  <span className="tabular-nums">
+                    {formatCurrency(order.total)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {error && (
           <p className="shrink-0 text-sm text-destructive">
             {getApiErrorMessage(error)}
@@ -612,7 +657,7 @@ function CloseCashDialog({
           <Button
             variant="destructive"
             onClick={() => onConfirm(valid ? parsed : expectedCash)}
-            disabled={isSubmitting || !valid}
+            disabled={isSubmitting || !valid || openOrders.length > 0}
           >
             {isSubmitting && <Loader2 className="size-4 animate-spin" />}
             Cerrar caja

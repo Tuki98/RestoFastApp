@@ -284,7 +284,9 @@ model Order {
   id             String           @id @default(uuid())
   organizationId String
   organization   Organization     @relation(fields: [organizationId], references: [id])
-  folio          Int              @unique @default(autoincrement())
+  folio          Int
+  cashSessionId String?
+  cashSession    CashSession? @relation(fields: [cashSessionId], references: [id], name: "OrderCashSession")
   orderType      OrderType
   tableId        String?
   table          RestaurantTable? @relation(fields: [tableId], references: [id])
@@ -303,6 +305,7 @@ model Order {
   items         OrderItem[]
   statusHistory OrderStatusHistory[]
   payments      Payment[]
+  @@unique([cashSessionId, folio])
 }
 
 model OrderItem {
@@ -365,11 +368,13 @@ model CashSession {
   countedCash     Decimal?     @db.Decimal(10, 2) // efectivo contado físicamente al cerrar
   cashDifference  Decimal?     @db.Decimal(10, 2) // sobre/faltante: contado - esperado
   ordersCount     Int?
+  nextFolio       Int            @default(0) // folio del próximo turno: 1, 2, 3... por cada caja abierta
   openedById      String
   openedBy        User         @relation("CashOpenedBy", fields: [openedById], references: [id])
   closedById      String?
   closedBy        User?        @relation("CashClosedBy", fields: [closedById], references: [id])
   expenses        Expense[]    @relation("CashSessionExpenses")
+  orders          Order[]       @relation("OrderCashSession")
   createdAt       DateTime     @default(now())
 
   @@index([openedAt])

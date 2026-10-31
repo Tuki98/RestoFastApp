@@ -5,6 +5,7 @@ const ORG = 'org-1';
 
 describe('OrdersService', () => {
   const prisma = {
+    cashSession: { findFirst: jest.fn(), update: jest.fn() },
     product: { findMany: jest.fn() },
     restaurantTable: { findFirst: jest.fn(), update: jest.fn() },
     order: {
@@ -23,6 +24,7 @@ describe('OrdersService', () => {
   function mockTransaction() {
     prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) => {
       const tx = {
+        cashSession: { update: prisma.cashSession.update },
         order: {
           create: prisma.order.create,
           update: prisma.order.update,
@@ -101,7 +103,20 @@ describe('OrdersService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('lanza error si no hay una caja abierta', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(ORG, 'u1', {
+          orderType: 'TAKEOUT',
+          items: [{ productId: 'p1', quantity: 1 }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.order.create).not.toHaveBeenCalled();
+    });
+
     it('valida que los productos existan', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue({ id: 'c1' });
       prisma.product.findMany.mockResolvedValue([{ id: 'p1' }]);
       await expect(
         service.create(ORG, 'u1', {
@@ -120,6 +135,7 @@ describe('OrdersService', () => {
     });
 
     it('valida que la mesa exista', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue({ id: 'c1' });
       prisma.product.findMany.mockResolvedValue([
         { id: 'p1', name: 'Hamburguesa clásica', price: 135 },
       ]);
@@ -130,12 +146,14 @@ describe('OrdersService', () => {
     });
 
     it('crea la orden con snapshots y totales (sin IVA por defecto); marca la mesa ocupada', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue({ id: 'c1' });
       prisma.product.findMany.mockResolvedValue([
         { id: 'p1', name: 'Hamburguesa clásica', price: 135 },
         { id: 'p2', name: 'Cerveza', price: 55 },
       ]);
       prisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
-      prisma.order.create.mockResolvedValue(orderRow());
+      prisma.cashSession.update.mockResolvedValue({ nextFolio: 2 });
+      prisma.order.create.mockResolvedValue(orderRow({ folio: 2 }));
 
       const result = await service.create(ORG, 'u1', {
         ...dto,
@@ -147,6 +165,8 @@ describe('OrdersService', () => {
 
       const created = prisma.order.create.mock.calls[0][0];
       expect(created.data.organizationId).toBe(ORG);
+      expect(created.data.folio).toBe(2);
+      expect(created.data.cashSessionId).toBe('c1');
       expect(created.data.orderType).toBe('DINE_IN');
       expect(created.data.status).toBe('PENDING');
       expect(created.data.createdById).toBe('u1');
@@ -170,6 +190,7 @@ describe('OrdersService', () => {
     });
 
     it('no marca mesa ocupada en comandas para llevar', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue({ id: 'c1' });
       prisma.product.findMany.mockResolvedValue([
         { id: 'p1', name: 'Cerveza', price: 55 },
       ]);

@@ -13,6 +13,7 @@ describe('CashService', () => {
       update: jest.fn(),
       updateMany: jest.fn(),
     },
+    order: { findMany: jest.fn(), findFirst: jest.fn() },
     payment: { findMany: jest.fn() },
     expense: { findMany: jest.fn() },
   };
@@ -229,6 +230,27 @@ describe('CashService', () => {
       expect(prisma.cashSession.updateMany).not.toHaveBeenCalled();
     });
 
+    it('lanza error si hay comandas abiertas al intentar cerrar', async () => {
+      prisma.cashSession.findFirst.mockResolvedValue(sessionRow());
+      prisma.order.findMany.mockResolvedValue([
+        { id: 'o1', folio: 3, status: 'PENDING' },
+        { id: 'o2', folio: 4, status: 'IN_PREPARATION' },
+      ]);
+
+      await expect(service.close(ORG, 'u2', 'c1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.cashSession.updateMany).not.toHaveBeenCalled();
+      expect(prisma.order.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            organizationId: ORG,
+            status: { notIn: ['PAID', 'CANCELLED'] },
+          },
+        }),
+      );
+    });
+
     it('guarda el snapshot de totales y devuelve el resumen', async () => {
       prisma.cashSession.findFirst
         .mockResolvedValueOnce(sessionRow())
@@ -243,6 +265,7 @@ describe('CashService', () => {
             closedBy: { id: 'u2', name: 'Gerente' },
           }),
         );
+      prisma.order.findMany.mockResolvedValue([]);
       prisma.payment.findMany.mockResolvedValue([
         { method: 'CASH', amount: '100.00' },
         { method: 'CARD', amount: '200.00' },
@@ -291,6 +314,7 @@ describe('CashService', () => {
 
     it('lanza error si otro cajero ya cerró la caja', async () => {
       prisma.cashSession.findFirst.mockResolvedValue(sessionRow());
+      prisma.order.findMany.mockResolvedValue([]);
       prisma.payment.findMany.mockResolvedValue([]);
       prisma.cashSession.updateMany.mockResolvedValue({ count: 0 });
 

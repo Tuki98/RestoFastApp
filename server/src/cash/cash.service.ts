@@ -121,6 +121,19 @@ export class CashService {
       throw new BadRequestException('La caja ya está cerrada');
     }
 
+    // No se puede cerrar el turno con comandas sin cobrar ni cancelar.
+    const openOrders = await this.prisma.order.findMany({
+      where: { organizationId, status: { notIn: ['PAID', 'CANCELLED'] } },
+      select: { id: true, folio: true, status: true },
+    });
+    if (openOrders.length > 0) {
+      throw new BadRequestException(
+        `No se puede cerrar la caja con ${openOrders.length} comanda(s) sin cobrar: ${openOrders
+          .map((order) => `#${order.folio}`)
+          .join(', ')}. Cierra o cobra cada comanda antes de cerrar el turno.`,
+      );
+    }
+
     const now = new Date();
     const summary = await this.liveSummary(
       organizationId,
@@ -370,6 +383,7 @@ export class CashService {
       openedAt: Date;
       closedAt: Date | null;
       openingBalance: unknown;
+      nextFolio?: number;
       openedBy: { id: string; name: string };
       closedBy: { id: string; name: string } | null;
     },
@@ -381,6 +395,7 @@ export class CashService {
       openedAt: session.openedAt,
       closedAt: session.closedAt,
       openingBalance,
+      nextFolio: session.nextFolio ?? 0,
       openedBy: session.openedBy,
       closedBy: session.closedBy,
       summary: {
