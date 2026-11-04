@@ -11,11 +11,13 @@ describe('OrdersService', () => {
     order: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
     },
     orderStatusHistory: { create: jest.fn() },
+    orderItem: { createMany: jest.fn(), create: jest.fn() },
     payment: { create: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -29,9 +31,11 @@ describe('OrdersService', () => {
           create: prisma.order.create,
           update: prisma.order.update,
           findUnique: prisma.order.findUnique,
+          findUniqueOrThrow: prisma.order.findUniqueOrThrow,
         },
         restaurantTable: { update: prisma.restaurantTable.update },
         orderStatusHistory: { create: prisma.orderStatusHistory.create },
+        orderItem: { createMany: prisma.orderItem.createMany },
         payment: { create: prisma.payment.create },
       };
       return fn(tx);
@@ -441,6 +445,60 @@ describe('OrdersService', () => {
           receivedById: 'u3',
         },
       });
+    });
+  });
+
+  describe('addItems', () => {
+    it('agrega productos sin activar el IGV por defecto', async () => {
+      prisma.order.findFirst.mockResolvedValue(
+        orderRow({ subtotal: '450.00', tax: '0.00', total: '450.00' }),
+      );
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p2', name: 'Cerveza', price: 55 },
+      ]);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({
+        subtotal: '450.00',
+        tax: '0.00',
+      });
+      prisma.order.update.mockResolvedValue(
+        orderRow({ subtotal: '505.00', tax: '0.00', total: '505.00' }),
+      );
+
+      await service.addItems(ORG, 'o1', {
+        items: [{ productId: 'p2', quantity: 1 }],
+      });
+
+      expect(prisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { subtotal: 505, tax: 0, total: 505 },
+        }),
+      );
+    });
+
+    it('recalcula el IGV solo si la comanda ya lo tenía aplicado', async () => {
+      prisma.order.findFirst.mockResolvedValue(
+        orderRow({ subtotal: '450.00', tax: '72.00', total: '522.00' }),
+      );
+      prisma.product.findMany.mockResolvedValue([
+        { id: 'p2', name: 'Cerveza', price: 55 },
+      ]);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({
+        subtotal: '450.00',
+        tax: '72.00',
+      });
+      prisma.order.update.mockResolvedValue(
+        orderRow({ subtotal: '505.00', tax: '80.80', total: '585.80' }),
+      );
+
+      await service.addItems(ORG, 'o1', {
+        items: [{ productId: 'p2', quantity: 1 }],
+      });
+
+      expect(prisma.order.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { subtotal: 505, tax: 80.8, total: 585.8 },
+        }),
+      );
     });
   });
 

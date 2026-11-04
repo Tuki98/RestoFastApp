@@ -387,10 +387,16 @@ export class OrdersService {
 
       const currentOrder = await tx.order.findUniqueOrThrow({
         where: { id },
-        select: { subtotal: true },
+        select: { subtotal: true, tax: true },
       });
-      const subtotalCents = Math.round(Number(currentOrder.subtotal) * 100) + addedSubtotalCents;
-      const taxCents = Math.round(subtotalCents * TAX_RATE);
+      const subtotalCents =
+        Math.round(Number(currentOrder.subtotal) * 100) + addedSubtotalCents;
+      // El IGV va desactivado por defecto: solo se recalcula si la comanda ya
+      // lo tenía aplicado. Agregar productos no debe activarlo por sí solo.
+      const taxCents =
+        Math.round(Number(currentOrder.tax) * 100) > 0
+          ? Math.round(subtotalCents * TAX_RATE)
+          : 0;
       const totalCents = subtotalCents + taxCents;
 
       const updated = await tx.order.update({
