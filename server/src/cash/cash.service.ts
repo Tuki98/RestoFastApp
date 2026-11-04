@@ -24,7 +24,7 @@ export interface CashExpenseItem {
 }
 
 export interface CashSummary {
-  incomeByMethod: { method: PaymentMethod; amount: number }[];
+  incomeByMethod: { method: PaymentMethod; amount: number; count: number }[];
   totalIncome: number;
   ordersCount: number;
   expenses: {
@@ -253,16 +253,23 @@ export class CashService {
       CARD: 0,
       YAPE_PLIN: 0,
     };
+    const counts: Record<PaymentMethod, number> = {
+      CASH: 0,
+      CARD: 0,
+      YAPE_PLIN: 0,
+    };
 
     for (const payment of payments) {
       totals[payment.method] =
         Math.round((totals[payment.method] + Number(payment.amount)) * 100) /
         100;
+      counts[payment.method] += 1;
     }
 
     const incomeByMethod = ALL_METHODS.map((method) => ({
       method,
       amount: totals[method],
+      count: counts[method],
     }));
 
     const expenseItems = expenses.map((expense) => ({
@@ -302,14 +309,17 @@ export class CashService {
       {
         method: 'CASH' as PaymentMethod,
         amount: Number(session.closingCash ?? 0),
+        count: 0,
       },
       {
         method: 'CARD' as PaymentMethod,
         amount: Number(session.closingCard ?? 0),
+        count: 0,
       },
       {
         method: 'YAPE_PLIN' as PaymentMethod,
         amount: Number(session.closingYape ?? 0),
+        count: 0,
       },
     ];
 
@@ -339,7 +349,7 @@ export class CashService {
 
   private emptySummary(): CashSummary {
     return {
-      incomeByMethod: ALL_METHODS.map((method) => ({ method, amount: 0 })),
+      incomeByMethod: ALL_METHODS.map((method) => ({ method, amount: 0, count: 0 })),
       totalIncome: 0,
       ordersCount: 0,
       expenses: { total: 0, count: 0, items: [] },
@@ -355,7 +365,7 @@ export class CashService {
 
   private sumAmounts(entries: { method: PaymentMethod; amount: number }[]) {
     return (
-      Math.round(entries.reduce((sum, entry) => sum + entry.amount, 0) * 100) /
+      Math.round(entries.reduce((sum, entry) => sum + Number(entry.amount), 0) * 100) /
       100
     );
   }

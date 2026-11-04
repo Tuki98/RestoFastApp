@@ -390,6 +390,12 @@ describe('ReportsService', () => {
         { category: 'INSUMOS', amount: '10.00' },
         { category: 'TRANSPORTE', amount: '5.00' },
       ]);
+      prisma.payment.findMany.mockResolvedValue([
+        { method: 'CASH', order: { cashSessionId: 'c1' } },
+        { method: 'CASH', order: { cashSessionId: 'c1' } },
+        { method: 'CARD', order: { cashSessionId: 'c1' } },
+        { method: 'YAPE_PLIN', order: { cashSessionId: 'c1' } },
+      ]);
 
       const result = await service.cashReport(ORG, {});
 
@@ -399,6 +405,9 @@ describe('ReportsService', () => {
         cash: 200,
         card: 300,
         yape: 50,
+        cashCount: 2,
+        cardCount: 1,
+        yapeCount: 1,
         total: 550,
         expenses: 30,
         netResult: 520,

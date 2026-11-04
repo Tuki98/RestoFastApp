@@ -337,6 +337,7 @@ function ActiveCashCard({
         <div className="space-y-2">
           {summary.incomeByMethod.map((entry) => {
             const Icon = METHOD_ICON[entry.method]
+            const count = (entry as { count?: number }).count ?? 0
             return (
               <div
                 key={entry.method}
@@ -345,6 +346,11 @@ function ActiveCashCard({
                 <span className="flex items-center gap-2 text-sm font-medium">
                   <Icon className="size-4 text-muted-foreground" />
                   {PAYMENT_METHOD_LABEL[entry.method]}
+                  {count > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      · {count} venta{count === 1 ? '' : 's'}
+                    </span>
+                  )}
                 </span>
                 <span className="text-sm font-semibold">
                   {formatCurrency(entry.amount)}
@@ -556,19 +562,54 @@ function CloseCashDialog({
             </div>
 
             <div className="space-y-2">
-              {session.summary.incomeByMethod.map((entry) => (
-                <div
-                  key={entry.method}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-muted-foreground">
-                    {PAYMENT_METHOD_LABEL[entry.method]}
-                  </span>
-                  <span className="font-medium">
-                    {formatCurrency(entry.amount)}
-                  </span>
-                </div>
-              ))}
+              <p className="text-xs font-medium text-muted-foreground uppercase">
+                Desglose por método de pago
+              </p>
+              {session.summary.incomeByMethod.map((entry) => {
+                const count = (entry as { count?: number }).count ?? 0
+                const cashExpenseTotal = session.summary.expenses.total
+                const isCash = entry.method === 'CASH'
+                const finalIncome = isCash
+                  ? Math.round((entry.amount - cashExpenseTotal) * 100) / 100
+                  : entry.amount
+                return (
+                  <div
+                    key={entry.method}
+                    className="rounded-md border bg-background p-2 text-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">
+                        {PAYMENT_METHOD_LABEL[entry.method]}
+                      </span>
+                      {count > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {count} venta{count === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-muted-foreground">
+                      <span>Ingresos cobrados</span>
+                      <span className="tabular-nums">
+                        {formatCurrency(entry.amount)}
+                      </span>
+                    </div>
+                    {isCash && (
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Gastos en efectivo</span>
+                        <span className="tabular-nums text-destructive">
+                          − {formatCurrency(cashExpenseTotal)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="mt-1 flex items-center justify-between border-t pt-1 font-medium">
+                      <span>Ingreso final</span>
+                      <span className="tabular-nums">
+                        {formatCurrency(finalIncome)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
               <div className="flex items-center justify-between border-t pt-2 text-sm">
                 <span className="font-medium">Total ingresos</span>
                 <span className="font-semibold">

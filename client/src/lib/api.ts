@@ -609,6 +609,7 @@ export type CashMethod = 'CASH' | 'CARD' | 'YAPE_PLIN'
 export interface CashIncomeByMethod {
   method: CashMethod
   amount: number
+  count: number
 }
 
 export interface CashExpenseItem {
@@ -964,6 +965,9 @@ export interface CashReport {
     cash: number
     card: number
     yape: number
+    cashCount: number
+    cardCount: number
+    yapeCount: number
     total: number
     expenses: number
     netResult: number

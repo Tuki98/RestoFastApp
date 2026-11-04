@@ -1163,12 +1163,21 @@ function CashTab({
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(session.cash)}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {session.cashCount} venta{session.cashCount === 1 ? '' : 's'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(session.card)}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {session.cardCount} venta{session.cardCount === 1 ? '' : 's'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatCurrency(session.yape)}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {session.yapeCount} venta{session.yapeCount === 1 ? '' : 's'}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">
                         {formatCurrency(session.total)}

@@ -397,7 +397,7 @@ export class ReportsService {
   async cashReport(organizationId: string, dto: ReportsRangeDto) {
     const { from, to } = this.resolveRange(dto);
 
-    const [sessions, expenses] = await Promise.all([
+    const [sessions, expenses, payments] = await Promise.all([
       this.prisma.cashSession.findMany({
         where: { organizationId, closedAt: { gte: from, lte: to } },
         include: {
@@ -410,7 +410,31 @@ export class ReportsService {
         where: { organizationId, incurredAt: { gte: from, lte: to } },
         select: { category: true, amount: true },
       }),
+      this.prisma.payment.findMany({
+        where: {
+          order: {
+            organizationId,
+            cashSessionId: { not: null },
+            cashSession: { closedAt: { gte: from, lte: to } },
+          },
+        },
+        select: { method: true, order: { select: { cashSessionId: true } } },
+      }),
     ]);
+
+    const countsBySession = new Map<
+      string,
+      Record<PaymentMethod, number>
+    >();
+    for (const payment of payments) {
+      const sessionId = payment.order?.cashSessionId;
+      if (!sessionId) continue;
+      const entry =
+        countsBySession.get(sessionId) ??
+        ({ CASH: 0, CARD: 0, YAPE_PLIN: 0 } as Record<PaymentMethod, number>);
+      entry[payment.method] += 1;
+      countsBySession.set(sessionId, entry);
+    }
 
     const expensesTotal = round2(
       expenses.reduce((sum, e) => sum + Number(e.amount), 0),
@@ -436,6 +460,9 @@ export class ReportsService {
       const yape = Number(session.closingYape ?? 0);
       const sessionExpenses = Number(session.closingExpenses ?? 0);
       const income = round2(cash + card + yape);
+      const counts =
+        countsBySession.get(session.id) ??
+        ({ CASH: 0, CARD: 0, YAPE_PLIN: 0 } as Record<PaymentMethod, number>);
       return {
         id: session.id,
         openedAt: session.openedAt,
@@ -446,6 +473,9 @@ export class ReportsService {
         cash,
         card,
         yape,
+        cashCount: counts.CASH,
+        cardCount: counts.CARD,
+        yapeCount: counts.YAPE_PLIN,
         total: income,
         expenses: sessionExpenses,
         netResult: round2(income - sessionExpenses),
