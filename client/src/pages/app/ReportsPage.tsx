@@ -134,30 +134,49 @@ function toDateString(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// Día operativo: de 11:30 a. m. a 11:29 a. m. del día siguiente.
+const BUSINESS_DAY_START_HOUR = 11
+const BUSINESS_DAY_START_MINUTE = 30
+
+function businessDayString(d: Date): string {
+  const x = new Date(d)
+  if (
+    x.getHours() < BUSINESS_DAY_START_HOUR ||
+    (x.getHours() === BUSINESS_DAY_START_HOUR &&
+      x.getMinutes() < BUSINESS_DAY_START_MINUTE)
+  ) {
+    x.setDate(x.getDate() - 1)
+  }
+  return toDateString(x)
+}
+
 function rangeFor(key: RangeKey): { from: string; to: string } {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = businessDayString(new Date())
+  // Mediodía del día operativo actual: evita problemas de zona horaria.
+  const base = new Date(`${today}T12:00:00`)
   switch (key) {
     case 'today':
-      return { from: toDateString(today), to: toDateString(today) }
+      return { from: today, to: today }
     case 'yesterday': {
-      const day = new Date(today)
+      const day = new Date(base)
       day.setDate(day.getDate() - 1)
-      return { from: toDateString(day), to: toDateString(day) }
+      const from = toDateString(day)
+      return { from, to: from }
     }
     case '7d': {
-      const from = new Date(today)
+      const from = new Date(base)
       from.setDate(from.getDate() - 6)
-      return { from: toDateString(from), to: toDateString(today) }
+      return { from: toDateString(from), to: today }
     }
     case 'month': {
-      const from = new Date(today.getFullYear(), today.getMonth(), 1)
-      return { from: toDateString(from), to: toDateString(today) }
+      const from = new Date(base.getFullYear(), base.getMonth(), 1)
+      const fromStr = toDateString(from)
+      return { from: fromStr > today ? today : fromStr, to: today }
     }
     default: {
-      const from = new Date(today)
+      const from = new Date(base)
       from.setDate(from.getDate() - 29)
-      return { from: toDateString(from), to: toDateString(today) }
+      return { from: toDateString(from), to: today }
     }
   }
 }
@@ -318,6 +337,9 @@ function ReportsPage() {
               />
             </div>
           )}
+          <p className="w-full text-xs text-muted-foreground">
+            Día operativo: de 11:30 a. m. a 11:29 a. m. del día siguiente.
+          </p>
         </CardContent>
       </Card>
 
@@ -643,6 +665,92 @@ function SummaryTab({
           )}
         </ChartCard>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ventas por turno</CardTitle>
+          <CardDescription>
+            Cada apertura de caja del período, con sus ventas por método de pago.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {summary.shifts.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No hay turnos de caja en el período.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Turno</TableHead>
+                    <TableHead className="text-right">Pedidos</TableHead>
+                    <TableHead className="text-right">Efectivo</TableHead>
+                    <TableHead className="text-right">Tarjeta</TableHead>
+                    <TableHead className="text-right">Yape/Plin</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Gastos</TableHead>
+                    <TableHead className="text-right">Ingreso neto</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summary.shifts.map((shift) => (
+                    <TableRow key={shift.id}>
+                      <TableCell>
+                        <div className="font-medium">
+                          {shift.isUnassigned
+                            ? 'Sin turno asignado'
+                            : formatDateTime(shift.openedAt)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {shift.isUnassigned
+                            ? 'Cobros históricos sin caja asociada'
+                            : shift.isOpen
+                              ? 'Abierta'
+                              : `Cierre: ${formatDateTime(shift.closedAt!)}`}
+                          {!shift.isUnassigned && shift.openedBy?.name
+                            ? ` · Abrió: ${shift.openedBy.name}`
+                            : ''}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {shift.ordersCount}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(shift.cash)}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {shift.cashCount} venta{shift.cashCount === 1 ? '' : 's'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(shift.card)}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {shift.cardCount} venta{shift.cardCount === 1 ? '' : 's'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatCurrency(shift.yape)}
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {shift.yapeCount} venta{shift.yapeCount === 1 ? '' : 's'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {formatCurrency(shift.total)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">
+                        {formatCurrency(shift.expenses)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">
+                        {formatCurrency(shift.netIncome)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

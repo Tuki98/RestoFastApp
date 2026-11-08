@@ -22,22 +22,53 @@ const NUMBER_FORMAT = '#,##0';
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
-function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-function endOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x;
-}
-
 function addDays(d: Date, days: number): Date {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
   return x;
+}
+
+// Día operativo del restaurante: de 11:30 a. m. a 11:29 a. m. del día siguiente.
+const BUSINESS_DAY_START_HOUR = 11;
+const BUSINESS_DAY_START_MINUTE = 30;
+
+function startOfBusinessDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(BUSINESS_DAY_START_HOUR, BUSINESS_DAY_START_MINUTE, 0, 0);
+  return x;
+}
+
+function endOfBusinessDay(d: Date): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + 1);
+  x.setHours(
+    BUSINESS_DAY_START_HOUR,
+    BUSINESS_DAY_START_MINUTE - 1,
+    59,
+    999,
+  );
+  return x;
+}
+
+/** Fecha (a las 00:00) del día operativo al que pertenece el instante dado. */
+function businessDayOf(d: Date): Date {
+  const x = new Date(d);
+  if (
+    x.getHours() < BUSINESS_DAY_START_HOUR ||
+    (x.getHours() === BUSINESS_DAY_START_HOUR &&
+      x.getMinutes() < BUSINESS_DAY_START_MINUTE)
+  ) {
+    x.setDate(x.getDate() - 1);
+  }
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Interpreta 'YYYY-MM-DD' como fecha local (sin desfase UTC). */
+function parseDateOnly(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
 }
 
 interface ResolvedRange {
@@ -62,28 +93,51 @@ export class ReportsService {
     const { from, to, prevFrom, prevTo } = this.resolveRange(dto);
     const range = { gte: from, lte: to };
 
-    const [paidOrders, payments, cancelled, prevPaid] = await Promise.all([
-      this.prisma.order.findMany({
-        where: { organizationId, status: 'PAID', paidAt: range },
-        select: { total: true, orderType: true },
-      }),
-      this.prisma.payment.findMany({
-        where: { order: { organizationId }, paidAt: range },
-        select: { method: true, amount: true },
-      }),
-      this.prisma.order.findMany({
-        where: { organizationId, status: 'CANCELLED', updatedAt: range },
-        select: { total: true },
-      }),
-      this.prisma.order.findMany({
-        where: {
-          organizationId,
-          status: 'PAID',
-          paidAt: { gte: prevFrom, lte: prevTo },
-        },
-        select: { total: true },
-      }),
-    ]);
+    const [paidOrders, payments, cancelled, prevPaid, sessions, expenses] =
+      await Promise.all([
+        this.prisma.order.findMany({
+          where: { organizationId, status: 'PAID', paidAt: range },
+          select: { total: true, orderType: true },
+        }),
+        this.prisma.payment.findMany({
+          where: { order: { organizationId }, paidAt: range },
+          select: {
+            method: true,
+            amount: true,
+            paidAt: true,
+            order: { select: { cashSessionId: true } },
+          },
+        }),
+        this.prisma.order.findMany({
+          where: { organizationId, status: 'CANCELLED', updatedAt: range },
+          select: { total: true },
+        }),
+        this.prisma.order.findMany({
+          where: {
+            organizationId,
+            status: 'PAID',
+            paidAt: { gte: prevFrom, lte: prevTo },
+          },
+          select: { total: true },
+        }),
+        // Turnos / aperturas de caja que se solapan con el período.
+        this.prisma.cashSession.findMany({
+          where: {
+            organizationId,
+            openedAt: { lte: to },
+            OR: [{ closedAt: null }, { closedAt: { gte: from } }],
+          },
+          include: {
+            openedBy: { select: { id: true, name: true } },
+            closedBy: { select: { id: true, name: true } },
+          },
+          orderBy: { openedAt: 'asc' },
+        }),
+        this.prisma.expense.findMany({
+          where: { organizationId, incurredAt: range },
+          select: { amount: true, cashSessionId: true },
+        }),
+      ]);
 
     const revenue = round2(
       paidOrders.reduce((sum, o) => sum + Number(o.total), 0),
@@ -118,6 +172,157 @@ export class ReportsService {
     const prevAvgTicket = prevOrdersCount ? prevRevenue / prevOrdersCount : 0;
     const avgTicket = ordersCount ? revenue / ordersCount : 0;
 
+    // Desglose de ventas por turno (apertura de caja).
+    const emptyMethodTotals = (): Record<PaymentMethod, number> => ({
+      CASH: 0,
+      CARD: 0,
+      YAPE_PLIN: 0,
+    });
+    const shiftAmounts = new Map<string, Record<PaymentMethod, number>>();
+    const shiftCounts = new Map<string, Record<PaymentMethod, number>>();
+    const unassignedPayments: typeof payments = [];
+    for (const payment of payments) {
+      let sessionId = payment.order?.cashSessionId ?? null;
+      if (!sessionId) {
+        // Cobros históricos sin cashSessionId: se atribuyen al turno cuya
+        // ventana [apertura, cierre) contiene el pago.
+        const paidAtMs = new Date(payment.paidAt).getTime();
+        const matched = sessions.find((session) => {
+          const start = new Date(session.openedAt).getTime();
+          const end = session.closedAt
+            ? new Date(session.closedAt).getTime()
+            : Number.POSITIVE_INFINITY;
+          return paidAtMs >= start && paidAtMs < end;
+        });
+        sessionId = matched?.id ?? null;
+      }
+      if (!sessionId) {
+        unassignedPayments.push(payment);
+        continue;
+      }
+      const amounts = shiftAmounts.get(sessionId) ?? emptyMethodTotals();
+      const counts = shiftCounts.get(sessionId) ?? emptyMethodTotals();
+      amounts[payment.method] = round2(
+        amounts[payment.method] + Number(payment.amount),
+      );
+      counts[payment.method] += 1;
+      shiftAmounts.set(sessionId, amounts);
+      shiftCounts.set(sessionId, counts);
+    }
+
+    const shiftExpenses = new Map<string, number>();
+    for (const expense of expenses) {
+      if (!expense.cashSessionId) continue;
+      shiftExpenses.set(
+        expense.cashSessionId,
+        round2(
+          (shiftExpenses.get(expense.cashSessionId) ?? 0) +
+            Number(expense.amount),
+        ),
+      );
+    }
+
+    const shifts = sessions
+      .filter((session) => {
+        // Una caja abierta desde antes del período solo se muestra si tuvo
+        // ventas dentro del período (evita turnos antiguos sin movimiento).
+        if (session.closedAt !== null || session.openedAt >= from) return true;
+        const counts = shiftCounts.get(session.id);
+        return Boolean(
+          counts && counts.CASH + counts.CARD + counts.YAPE_PLIN > 0,
+        );
+      })
+      .map((session) => {
+      const isOpen = session.closedAt === null;
+      const linkedAmounts = shiftAmounts.get(session.id);
+      const linkedCounts = shiftCounts.get(session.id);
+      const linkedSales = linkedCounts
+        ? linkedCounts.CASH + linkedCounts.CARD + linkedCounts.YAPE_PLIN
+        : 0;
+      const useLinked = linkedSales > 0;
+
+      const amounts = useLinked
+        ? (linkedAmounts as Record<PaymentMethod, number>)
+        : {
+            CASH: Number(session.closingCash ?? 0),
+            CARD: Number(session.closingCard ?? 0),
+            YAPE_PLIN: Number(session.closingYape ?? 0),
+          };
+      const counts = useLinked
+        ? (linkedCounts as Record<PaymentMethod, number>)
+        : emptyMethodTotals();
+
+      const total = round2(amounts.CASH + amounts.CARD + amounts.YAPE_PLIN);
+      const mappedExpenses = shiftExpenses.get(session.id);
+      const expensesTotal =
+        mappedExpenses !== undefined
+          ? mappedExpenses
+          : isOpen
+            ? 0
+            : round2(Number(session.closingExpenses ?? 0));
+
+      return {
+        id: session.id,
+        openedAt: session.openedAt,
+        closedAt: session.closedAt,
+        openedBy: session.openedBy,
+        closedBy: session.closedBy,
+        isOpen,
+        isUnassigned: false,
+        openingBalance: round2(Number(session.openingBalance)),
+        ordersCount: useLinked
+          ? linkedSales
+          : Number(session.ordersCount ?? 0),
+        cash: amounts.CASH,
+        card: amounts.CARD,
+        yape: amounts.YAPE_PLIN,
+        cashCount: counts.CASH,
+        cardCount: counts.CARD,
+        yapeCount: counts.YAPE_PLIN,
+        total,
+        expenses: expensesTotal,
+        netIncome: round2(total - expensesTotal),
+      };
+    });
+
+    // Cobros históricos que no caen en ningún turno registrado.
+    if (unassignedPayments.length > 0) {
+      const amounts = emptyMethodTotals();
+      const counts = emptyMethodTotals();
+      for (const payment of unassignedPayments) {
+        amounts[payment.method] = round2(
+          amounts[payment.method] + Number(payment.amount),
+        );
+        counts[payment.method] += 1;
+      }
+      const total = round2(amounts.CASH + amounts.CARD + amounts.YAPE_PLIN);
+      const expensesTotal = round2(
+        expenses
+          .filter((expense) => !expense.cashSessionId)
+          .reduce((sum, expense) => sum + Number(expense.amount), 0),
+      );
+      shifts.push({
+        id: 'unassigned',
+        openedAt: from,
+        closedAt: null,
+        openedBy: { id: '', name: 'Sin turno' },
+        closedBy: null,
+        isOpen: false,
+        isUnassigned: true,
+        openingBalance: 0,
+        ordersCount: unassignedPayments.length,
+        cash: amounts.CASH,
+        card: amounts.CARD,
+        yape: amounts.YAPE_PLIN,
+        cashCount: counts.CASH,
+        cardCount: counts.CARD,
+        yapeCount: counts.YAPE_PLIN,
+        total,
+        expenses: expensesTotal,
+        netIncome: round2(total - expensesTotal),
+      });
+    }
+
     return {
       range: this.serializeRange({ from, to }),
       revenue,
@@ -135,6 +340,7 @@ export class ReportsService {
           : null,
       byPaymentMethod,
       byOrderType,
+      shifts,
     };
   }
 
@@ -171,7 +377,8 @@ export class ReportsService {
       bucket.orders += 1;
       buckets.set(key, bucket);
 
-      const dow = date.getDay() === 0 ? 7 : date.getDay();
+      const dowDate = businessDayOf(date);
+      const dow = dowDate.getDay() === 0 ? 7 : dowDate.getDay();
       byDayOfWeek[dow - 1].revenue = round2(byDayOfWeek[dow - 1].revenue + total);
       byDayOfWeek[dow - 1].orders += 1;
 
@@ -634,15 +841,9 @@ export class ReportsService {
   private resolveRange(dto: RangeInput): ResolvedRange {
     const now = new Date();
     const from = dto.from
-      ? dto.from.includes('T')
-        ? new Date(dto.from)
-        : startOfDay(new Date(dto.from))
-      : startOfDay(addDays(now, -29));
-    const to = dto.to
-      ? dto.to.includes('T')
-        ? new Date(dto.to)
-        : endOfDay(new Date(dto.to))
-      : now;
+      ? this.parseBoundary(dto.from, 'from')
+      : startOfBusinessDay(addDays(now, -29));
+    const to = dto.to ? this.parseBoundary(dto.to, 'to') : now;
 
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       throw new BadRequestException('Rango de fechas inválido');
@@ -660,6 +861,18 @@ export class ReportsService {
     return { from, to, prevFrom, prevTo };
   }
 
+  /**
+   * Fechas sin hora ('YYYY-MM-DD') representan días operativos completos:
+   * desde las 11:30 a. m. del día indicado hasta las 11:29 a. m. del siguiente.
+   * Las fechas ISO con hora se respetan tal cual (rango avanzado).
+   */
+  private parseBoundary(value: string, edge: 'from' | 'to'): Date {
+    if (value.includes('T')) return new Date(value);
+    const date = parseDateOnly(value);
+    if (!date) return new Date(value);
+    return edge === 'from' ? startOfBusinessDay(date) : endOfBusinessDay(date);
+  }
+
   private serializeRange({ from, to }: { from: Date; to: Date }) {
     return {
       from: from.toISOString(),
@@ -671,16 +884,17 @@ export class ReportsService {
     date: Date,
     granularity: 'day' | 'week' | 'month',
   ): string {
+    const businessDate = businessDayOf(date);
     if (granularity === 'month') {
-      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      return `${businessDate.getFullYear()}-${String(businessDate.getMonth() + 1).padStart(2, '0')}`;
     }
     if (granularity === 'week') {
-      const dayFromMonday = (date.getDay() + 6) % 7;
-      const monday = new Date(date);
-      monday.setDate(date.getDate() - dayFromMonday);
+      const dayFromMonday = (businessDate.getDay() + 6) % 7;
+      const monday = new Date(businessDate);
+      monday.setDate(businessDate.getDate() - dayFromMonday);
       return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
     }
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return `${businessDate.getFullYear()}-${String(businessDate.getMonth() + 1).padStart(2, '0')}-${String(businessDate.getDate()).padStart(2, '0')}`;
   }
 
   // ---------- Utilidades de Excel ----------
@@ -774,6 +988,45 @@ export class ReportsService {
     summary.byOrderType.forEach((entry) => {
       const row = sheet.addRow([entry.type, entry.amount, entry.count]);
       row.getCell(2).numFmt = MONEY_FORMAT;
+    });
+    sheet.addRow([]);
+
+    this.headerRow(sheet, [
+      'Turno (apertura)',
+      'Cierre',
+      'Estado',
+      'Pedidos',
+      'Efectivo',
+      'Tarjeta',
+      'Yape/Plin',
+      'Total',
+      'Gastos',
+      'Ingreso neto',
+    ]);
+    summary.shifts.forEach((shift) => {
+      const row = sheet.addRow([
+        shift.isUnassigned ? 'Sin turno asignado' : shift.openedAt,
+        shift.isUnassigned ? '-' : (shift.closedAt ?? '-'),
+        shift.isUnassigned
+          ? 'Histórico'
+          : shift.isOpen
+            ? 'Abierta'
+            : 'Cerrada',
+        shift.ordersCount,
+        shift.cash,
+        shift.card,
+        shift.yape,
+        shift.total,
+        shift.expenses,
+        shift.netIncome,
+      ]);
+      if (!shift.isUnassigned) {
+        row.getCell(1).numFmt = 'dd/mm/yyyy hh:mm';
+        row.getCell(2).numFmt = 'dd/mm/yyyy hh:mm';
+      }
+      [5, 6, 7, 8, 9, 10].forEach((col) => {
+        row.getCell(col).numFmt = MONEY_FORMAT;
+      });
     });
     sheet.getColumn(1).width = 30;
     sheet.getColumn(2).width = 16;

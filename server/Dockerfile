@@ -15,6 +15,9 @@ RUN npx prisma generate && npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
+# Zona horaria del restaurante (día operativo 11:30 → 11:29).
+RUN apk add --no-cache tzdata
+ENV TZ=America/Lima
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY --from=deps /app/node_modules ./node_modules

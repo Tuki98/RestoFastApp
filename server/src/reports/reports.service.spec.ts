@@ -34,6 +34,7 @@ describe('ReportsService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     prisma.expense.findMany.mockResolvedValue([]);
+    prisma.cashSession.findMany.mockResolvedValue([]);
     service = new ReportsService(prisma as never);
   });
 
@@ -145,6 +146,63 @@ describe('ReportsService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(prisma.order.findMany).not.toHaveBeenCalled();
     });
+
+    it('interpreta las fechas como día operativo de 11:30 a 11:29', async () => {
+      prisma.order.findMany.mockResolvedValue([]);
+      prisma.payment.findMany.mockResolvedValue([]);
+
+      await service.summary(ORG, { from: '2026-08-01', to: '2026-08-01' });
+
+      const where = prisma.order.findMany.mock.calls[0][0].where;
+      expect(where.paidAt.gte).toEqual(new Date(2026, 7, 1, 11, 30, 0, 0));
+      expect(where.paidAt.lte).toEqual(new Date(2026, 7, 2, 11, 29, 59, 999));
+    });
+
+    it('desglosa las ventas por turno de caja', async () => {
+      prisma.order.findMany.mockResolvedValue([paidOrder({ total: '150.00' })]);
+      prisma.payment.findMany.mockResolvedValue([
+        { method: 'CASH', amount: '100.00', order: { cashSessionId: 's1' } },
+        { method: 'CARD', amount: '50.00', order: { cashSessionId: 's1' } },
+      ]);
+      prisma.expense.findMany.mockResolvedValue([
+        { amount: '10.00', cashSessionId: 's1' },
+      ]);
+      prisma.cashSession.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          openedAt: localDate(2026, 8, 1, 12),
+          closedAt: localDate(2026, 8, 1, 20),
+          openedBy: { id: 'u1', name: 'Caja' },
+          closedBy: null,
+          openingBalance: '50.00',
+          closingCash: '100.00',
+          closingCard: '50.00',
+          closingYape: '0.00',
+          closingExpenses: '10.00',
+          ordersCount: 2,
+        },
+      ]);
+
+      const result = await service.summary(ORG, {});
+
+      expect(result.shifts).toEqual([
+        expect.objectContaining({
+          id: 's1',
+          isOpen: false,
+          openingBalance: 50,
+          ordersCount: 2,
+          cash: 100,
+          card: 50,
+          yape: 0,
+          cashCount: 1,
+          cardCount: 1,
+          yapeCount: 0,
+          total: 150,
+          expenses: 10,
+          netIncome: 140,
+        }),
+      ]);
+    });
   });
 
   describe('salesTrend', () => {
@@ -176,6 +234,29 @@ describe('ReportsService', () => {
       expect(result.byDayOfWeek[dow - 1]).toMatchObject({ revenue: 300, orders: 2 });
       expect(result.byHour[12]).toMatchObject({ revenue: 100, orders: 1 });
       expect(result.byHour[13]).toMatchObject({ revenue: 200, orders: 1 });
+    });
+
+    it('agrupa las ventas de madrugada en el día operativo anterior', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        paidOrder({
+          total: '100.00',
+          paidAt: localDate(2026, 8, 10, 23).toISOString(),
+        }),
+        paidOrder({
+          total: '100.00',
+          paidAt: localDate(2026, 8, 11, 2).toISOString(),
+        }),
+      ]);
+
+      const result = await service.salesTrend(ORG, { granularity: 'day' });
+
+      expect(result.series).toEqual([
+        {
+          period: keyDay(localDate(2026, 8, 10)),
+          revenue: 200,
+          orders: 2,
+        },
+      ]);
     });
 
     it('agrupa por mes cuando se pide granularidad mensual', async () => {

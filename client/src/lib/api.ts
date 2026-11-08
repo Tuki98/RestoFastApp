@@ -884,6 +884,27 @@ export interface ReportRange {
   to: string
 }
 
+export interface ShiftSummary {
+  id: string
+  openedAt: string
+  closedAt: string | null
+  openedBy: { id: string; name: string }
+  closedBy: { id: string; name: string } | null
+  isOpen: boolean
+  isUnassigned: boolean
+  openingBalance: number
+  ordersCount: number
+  cash: number
+  card: number
+  yape: number
+  cashCount: number
+  cardCount: number
+  yapeCount: number
+  total: number
+  expenses: number
+  netIncome: number
+}
+
 export interface SummaryReport {
   range: ReportRange
   revenue: number
@@ -897,6 +918,7 @@ export interface SummaryReport {
   avgTicketDeltaPct: number | null
   byPaymentMethod: { method: PaymentMethod; amount: number; count: number }[]
   byOrderType: { type: OrderType; amount: number; count: number }[]
+  shifts: ShiftSummary[]
 }
 
 export interface SalesTrendReport {
