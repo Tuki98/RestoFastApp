@@ -339,40 +339,50 @@ function ReportsPage() {
         ))}
       </div>
 
-      {tab === 'resumen' && (
-        <SummaryTab
-          query={summaryQuery}
-          onRetry={() => summaryQuery.refetch()}
-        />
-      )}
-      {tab === 'ventas' && (
-        <TrendTab
-          query={trendQuery}
-          granularity={granularity}
-          onGranularity={setGranularity}
-          onRetry={() => trendQuery.refetch()}
-        />
-      )}
-      {tab === 'productos' && (
-        <ProductsTab
-          query={productsQuery}
-          onRetry={() => productsQuery.refetch()}
-        />
-      )}
-      {tab === 'servicio' && (
-        <ServiceTab
-          query={serviceQuery}
-          onRetry={() => serviceQuery.refetch()}
-        />
-      )}
-      {tab === 'caja' && (
-        <CashTab query={cashQuery} onRetry={() => cashQuery.refetch()} />
-      )}
-      {tab === 'inventario' && (
-        <InventoryTab
-          query={inventoryQuery}
-          onRetry={() => inventoryQuery.refetch()}
-        />
+      {!enabled ? (
+        <Card>
+          <CardContent className="py-12 text-center text-sm text-muted-foreground">
+            Selecciona la fecha de inicio y fin para ver el reporte.
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {tab === 'resumen' && (
+            <SummaryTab
+              query={summaryQuery}
+              onRetry={() => summaryQuery.refetch()}
+            />
+          )}
+          {tab === 'ventas' && (
+            <TrendTab
+              query={trendQuery}
+              granularity={granularity}
+              onGranularity={setGranularity}
+              onRetry={() => trendQuery.refetch()}
+            />
+          )}
+          {tab === 'productos' && (
+            <ProductsTab
+              query={productsQuery}
+              onRetry={() => productsQuery.refetch()}
+            />
+          )}
+          {tab === 'servicio' && (
+            <ServiceTab
+              query={serviceQuery}
+              onRetry={() => serviceQuery.refetch()}
+            />
+          )}
+          {tab === 'caja' && (
+            <CashTab query={cashQuery} onRetry={() => cashQuery.refetch()} />
+          )}
+          {tab === 'inventario' && (
+            <InventoryTab
+              query={inventoryQuery}
+              onRetry={() => inventoryQuery.refetch()}
+            />
+          )}
+        </>
       )}
     </div>
   )
@@ -380,14 +390,16 @@ function ReportsPage() {
 
 function QueryState({
   loading,
+  hasData,
   error,
   onRetry,
 }: {
   loading: boolean
+  hasData: boolean
   error: Error | null
   onRetry: () => void
 }) {
-  if (loading) {
+  if (loading || (!error && !hasData)) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -506,7 +518,7 @@ function SummaryTab({
   query: { data?: SummaryReport; isLoading: boolean; isError: boolean; error: Error | null }
   onRetry: () => void
 }) {
-  const state = QueryState({ loading: query.isLoading, error: query.error, onRetry })
+  const state = QueryState({ loading: query.isLoading, hasData: Boolean(query.data), error: query.error, onRetry })
   if (state) return state
   const summary = query.data!
 
@@ -648,7 +660,7 @@ function TrendTab({
   onGranularity: (g: 'day' | 'week' | 'month') => void
   onRetry: () => void
 }) {
-  const state = QueryState({ loading: query.isLoading, error: query.error, onRetry })
+  const state = QueryState({ loading: query.isLoading, hasData: Boolean(query.data), error: query.error, onRetry })
   if (state) return state
   const trend = query.data!
 
@@ -789,7 +801,7 @@ function ProductsTab({
   query: { data?: TopProductsReport; isLoading: boolean; isError: boolean; error: Error | null }
   onRetry: () => void
 }) {
-  const state = QueryState({ loading: query.isLoading, error: query.error, onRetry })
+  const state = QueryState({ loading: query.isLoading, hasData: Boolean(query.data), error: query.error, onRetry })
   if (state) return state
   const products = query.data!
 
@@ -930,7 +942,7 @@ function ServiceTab({
   query: { data?: ServiceReport; isLoading: boolean; isError: boolean; error: Error | null }
   onRetry: () => void
 }) {
-  const state = QueryState({ loading: query.isLoading, error: query.error, onRetry })
+  const state = QueryState({ loading: query.isLoading, hasData: Boolean(query.data), error: query.error, onRetry })
   if (state) return state
   const service = query.data!
   const st = service.serviceTimes
@@ -1048,7 +1060,7 @@ function CashTab({
   query: { data?: CashReport; isLoading: boolean; isError: boolean; error: Error | null }
   onRetry: () => void
 }) {
-  const state = QueryState({ loading: query.isLoading, error: query.error, onRetry })
+  const state = QueryState({ loading: query.isLoading, hasData: Boolean(query.data), error: query.error, onRetry })
   if (state) return state
   const cash = query.data!
 
@@ -1217,7 +1229,7 @@ function InventoryTab({
   query: { data?: InventoryReport; isLoading: boolean; isError: boolean; error: Error | null }
   onRetry: () => void
 }) {
-  const state = QueryState({ loading: query.isLoading, error: query.error, onRetry })
+  const state = QueryState({ loading: query.isLoading, hasData: Boolean(query.data), error: query.error, onRetry })
   if (state) return state
   const inventory = query.data!
 
